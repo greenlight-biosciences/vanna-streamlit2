@@ -10,6 +10,12 @@ from vanna.chromadb.chromadb_vector import ChromaDB_VectorStore
 from dotenv import load_dotenv
 import os
 load_dotenv(".env")
+import re
+
+def is_select_statement(s):
+    pattern = r"^\s*SELECT\s"
+    return bool(re.match(pattern, s, re.IGNORECASE))
+
 
 class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         def __init__(self, config=None):
@@ -28,30 +34,13 @@ vn= MyVanna(
 vn.connect_to_sqlite('biotech_database.db') 
 
 
-def setup_session_state():
-    st.session_state["my_question"] = None
-my_question = st.session_state.get("my_question", default=None)
-
 st.set_page_config(layout="wide")
-
-
-st.sidebar.title("Output Settings")
-st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
-st.sidebar.checkbox("Show Table", value=True, key="show_table")
-st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
-st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
-st.sidebar.checkbox("Show Follow-up Questions", value=True, key="show_followup")
-st.sidebar.button("Rerun", on_click=setup_session_state, use_container_width=True)
-
 st.title("Data G.E.N.I.E")
-def resetPrompt():
-    st.session_state['prompt'] = None
-    st.session_state['sql'] =None
-    st.session_state['code'] =None
-    st.session_state['df'] =None
-    st.session_state['fig'] =None
-    st.session_state['tempSQL'] =None
-    st.rerun()
+tab1,tab2 = st.tabs(['Chatbot',"🗃 SQL KnowledgeBase"])
+
+tab2.subheader("Training Data")
+tab2.dataframe(vn.get_training_data())
+
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "How can I help?" , "type":"markdown"}]
@@ -61,7 +50,45 @@ if "messages" not in st.session_state:
     st.session_state.df =None
     st.session_state.fig =None
     st.session_state.tempSQL =None
-    st.session_state.firstMessage =None
+    st.session_state.tempCode =None
+    st.session_state.enableUserTextInput =True
+    st.session_state.saveQnAPair =None
+    myQuestion = None
+
+def resetPrompt():
+    st.session_state['prompt'] = None
+    st.session_state['sql'] =None
+    st.session_state['code'] =None
+    st.session_state['df'] =None
+    st.session_state['fig'] =None
+    st.session_state['tempSQL'] =None
+    st.session_state['saveQnAPair'] =None
+    st.session_state['tempCode'] =None
+    st.session_state['enableUserTextInput'] =True
+    myQuestion = None
+    st.rerun()
+
+def reRunClearApp():
+    st.session_state['messages']= [{"role": "assistant", "content": "How can I help?" , "type":"markdown"}]
+    st.session_state['prompt'] = None
+    st.session_state['sql'] =None
+    st.session_state['code'] =None
+    st.session_state['df'] =None
+    st.session_state['fig'] =None
+    st.session_state['tempSQL'] =None
+    st.session_state['saveQnAPair'] =None
+    st.session_state['tempCode'] =None
+    st.session_state['enableUserTextInput'] =True
+    myQuestion = None
+
+st.sidebar.title("Output Settings")
+st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
+st.sidebar.checkbox("Show Table", value=True, key="show_table")
+st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
+st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
+st.sidebar.checkbox("Show Follow-up Questions", value=True, key="show_followup")
+st.sidebar.checkbox("Show Session State", value=True, key="show_sessionstate")
+st.sidebar.button("Rerun", on_click=reRunClearApp, use_container_width=True)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -79,23 +106,13 @@ for message in st.session_state.messages:
             st.error(message["content"])
         else:
             st.text(message["content"])
-st.sidebar.write(st.session_state)
 
-# def set_question(question):
-#     st.session_state['prompt'] = question
-#     st.session_state['firstMessage'] = False
+if st.session_state.get('show_sessionstate',True):  
+    st.sidebar.write(st.session_state)
 
-# def submit_chat(author, message):
-#     st.chat_message(author).markdown(message)
-#     st.session_state.messages.append({"role":author, "content": message })
+    
+if   myQuestion :=  st.chat_input( "Ask me a question about your data", disabled= not st.session_state['enableUserTextInput'] ) :
 
-# if st.session_state['prompt'] is None:
-#     myQuestion =  st.chat_input( "Ask me a question about your data", )
-#     st.session_state['firstMessage']=True
-# else:
-#     st.session_state['firstMessage']=False
-# st.chat_input( "Ask me a question about your data", )
-if   myQuestion :=  st.chat_input( "Ask me a question about your data", ) :
     print('entering 1')
     # with st.chat_message("assistant"):
     #     questions = vn.generate_questions() 
@@ -110,20 +127,28 @@ if   myQuestion :=  st.chat_input( "Ask me a question about your data", ) :
     #     st.session_state.messages.append({"role": "assistant", "content": "\n-".join(questions),'type': 'markdown'})
     st.session_state.messages.append({"role": "user", "content": myQuestion, "type":"markdown"})
     st.session_state['prompt'] =myQuestion
-    st.session_state['firstMessage']=False
+    st.session_state['enableUserTextInput']=False
     st.rerun()
 
 elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None:   
     print('entering 2') 
-
     st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'])
+
+    if is_select_statement(st.session_state['tempSQL']) == False:
+        #responses is not a select statement let user ask again
+        st.session_state.messages.append({"role": "assistant", "content": st.session_state['tempSQL'] , "type":"sql"})
+        st.session_state['enableUserTextInput']=True
+        st.session_state['prompt']=None
+        st.session_state['tempSQL']=None
+        st.rerun()
 
     if st.session_state.get("show_sql", True):
         st.session_state.messages.append({"role": "assistant", "content": st.session_state['tempSQL'] , "type":"sql"})
+        st.rerun()
     else:
         st.session_state['sql'] = st.session_state['tempSQL']
         st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
-    st.rerun()
+        st.rerun()
 
 elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None:
     print('entering 3') 
@@ -137,21 +162,20 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
         )
 
     if sqlRadioInput == "Edit :pencil2:":
-        st.session_state.messages.append({"role": "user", "content": "I would like to Edit the SQL :pencil2:" , "type":"markdown"  })
-
         st.warning("Please update the generated SQL code. Once you're done hit Shift + Enter to submit" )
         
         sql_response = code_editor(st.session_state['tempSQL'], lang="sql")
         fixed_sql_query = sql_response["text"]
 
         if fixed_sql_query != "":
-            st.session_state.messages.append({"role": "user", "content": ":pencil: SQL: ", "type":"markdown"})
-            st.session_state.messages.append({"role": "user", "content":  fixed_sql_query , "type":"sql"})
-            st.session_state['sql'] = fixed_sql_query
+            st.session_state.messages.append({"role": "user", "content": "I would like to edit the SQL :pencil2:" , "type":"markdown"  })
+            # st.session_state.messages.append({"role": "user", "content": ":pencil: Edited SQL: ", "type":"markdown"})
+            st.session_state['sql'] = "--Edited SQL:\n"+ fixed_sql_query
             st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
+            st.session_state.messages.append({"role": "user", "content":  st.session_state['sql'] , "type":"sql"})
+            st.rerun()
         else:
-            st.session_state['sql'] = None
-        st.rerun()
+            st.stop()
     elif sqlRadioInput == "OK :white_check_mark:":
         st.session_state.messages.append({"role": "user", "content": "SQL looks good :white_check_mark:", "type":"markdown"})
         st.session_state['sql']=st.session_state['tempSQL']
@@ -160,33 +184,42 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
     else:
         st.stop()
 
-elif st.session_state["df"] is not None and st.session_state["code"] is None:
-    print('entering 3')    
+elif st.session_state["df"] is not None and st.session_state["tempCode"] is None:
+    print('entering 3')   
+    df = st.session_state.get("df")
     if st.session_state.get("show_table", True):
-        df = st.session_state.get("df")
         # with st.chat_message("assistant"):
         if len(df) > 10:
             #st.text("First 10 rows of data")
             #st.dataframe(df.head(10))
-            st.session_state.messages.append({"role": "assistant", "content": "First 10 rows of data"  , "type":"text"})
+            st.session_state.messages.append({"role": "assistant", "content": "First 10 rows of data"  , "type":"markdown"})
             st.session_state.messages.append({"role": "assistant", "content": df.head(10) , "type":"dataframe" })
         elif len(df) == 0:
-            st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"text"})
-            st.session_state.messages.append({"role": "assistant", "content": "Query returned zero rows, unable to make a figure please try again with a new question"  , "type":"text"})
+            st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"markdown"})
+            st.session_state.messages.append({"role": "assistant", "content": df , "type":"dataframe" })
+            st.session_state.messages.append({"role": "assistant", "content": "Query returned zero rows, unable to make a figure please try again with a new question"  , "type":"markdown"})
             resetPrompt()
         else:
+            st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"markdown"})
             st.session_state.messages.append({"role": "assistant", "content": df , "type":"dataframe" })
             #st.dataframe(df)
+
     # with user_message_sql_check:
     chart_instructions_input= "Please make the figure red in color and title it Nice Red figure"
         
-        # if chart_instructions_input != '':
-    st.session_state["code"] = vn.generate_plotly_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df=df,chart_instructions=chart_instructions_input)
-    if st.session_state.get("show_plotly_code", True):
-        st.session_state.messages.append({"role": "assistant", "content": st.session_state["code"] , "type":"code" })
-    st.rerun()
+    # if chart_instructions_input != '':
+    st.session_state["tempCode"] = vn.generate_plotly_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df=df,chart_instructions=chart_instructions_input)
 
-elif st.session_state["code"]  is not None and st.session_state.get("show_plotly_code", True):
+    if st.session_state.get("show_plotly_code", True):
+        st.session_state.messages.append({"role": "assistant", "content": "Here is the code we can use to generate a figure from the data:"  , "type":"markdown"})
+        st.session_state.messages.append({"role": "assistant", "content": st.session_state["tempCode"] , "type":"code" })
+        st.rerun()
+    else:
+        st.session_state["code"] = st.session_state["tempCode"] 
+        st.rerun()
+
+elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None :
+    print('entering 4')   
     with st.chat_message("user"):
         plotyRadioInput = st.radio(
                 "I would like to ...",
@@ -196,27 +229,65 @@ elif st.session_state["code"]  is not None and st.session_state.get("show_plotly
                 horizontal = True
             )
     if plotyRadioInput == "Edit :pencil2:":
-        st.session_state.messages.append({"role": "user", "content": "I would like to Edit the Plot Code :pencil2:", 'type':"markdown" })
+        
         st.warning("Please fix the generated Python code. Once you're done hit Shift + Enter to submit")
-        
-        python_code_response = code_editor(st.session_state["code"], lang="python")
-        code = python_code_response["text"]
-        
-        st.session_state.messages.append({"role": "user", "content": code, 'type':'code' })
-        st.rerun()
-    elif plotyRadioInput == "K :white_check_mark:":
+        python_code_response = code_editor(st.session_state["tempCode"], lang="python")
+        fixed_python_code = python_code_response["text"]
+
+        if fixed_python_code != "":
+            st.session_state.messages.append({"role": "user", "content": "I would like to Edit the Plot Code :pencil2:", 'type':"markdown" })
+            st.session_state["code"] = "#Edited Python Code:\n"+python_code_response["text"]
+            # st.session_state.messages.append({"role": "user", "content": ":pencil: Edited code: ", "type":"markdown"})
+            st.session_state.messages.append({"role": "user", "content": st.session_state["code"], 'type':'code' })
+            st.rerun()
+        else:
+            st.stop()
+    elif plotyRadioInput == "OK :white_check_mark:":
         st.session_state.messages.append({"role": "user", "content": "Plot code looks good! :white_check_mark:", 'type':'markdown'   })
+        st.session_state["code"] = st.session_state["tempCode"]
         st.rerun()
 
-elif st.session_state["code"]  is not None and st.session_state["fig"] is None:
+elif st.session_state["code"] is not None and st.session_state["fig"] is None:
+    print('entering 5')
     if st.session_state.get("show_chart", True):
         st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["code"] , df=st.session_state["df"])
         if st.session_state["fig"] is not None:
+            st.session_state.messages.append({"role": "assistant", "content": "Here is the generated figure:"  , "type":"markdown"})
             st.session_state.messages.append({"role": "assistant", "content": st.session_state["fig"]  , 'type':'figure' })
+            st.session_state.messages.append({"role": "assistant", "content": "Do you want to save this question and SQL answer-pair to my knowledge base?"  , "type":"markdown"})
+
         else:
             st.session_state.messages.append({"role": "assistant", "content":"I couldn't generate a chart" , 'type':'error' })
         st.rerun()
+
+elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is None:
+
+    print('entering 6')   
+    with st.chat_message("user"):
+        plotyRadioInput = st.radio(
+                "I would like to ...",
+                options=["Yes :floppy_disk:", "No :x:"],
+                index=None,
+                captions = ["Yes, Save the question and SQL answer-pair", "No, do not save"],
+                horizontal = True
+            )
+    if plotyRadioInput == "Yes :floppy_disk:":
+        st.session_state.messages.append({"role": "user", "content": "Yes, Save the question and SQL answer-pair :floppy_disk:", 'type':"markdown" })
+        vn.add_question_sql(st.session_state["prompt"],st.session_state["sql"])
+        st.session_state.messages.append({"role": "assistant", "content": "Done!"  , "type":"markdown"})
+        st.session_state["saveQnAPair"] = True
+        st.rerun()
+    elif plotyRadioInput == "No :x:":
+        st.session_state.messages.append({"role": "assistant", "content": "No, do not save the question and SQL answer-pair :x:", 'type':'markdown'   })
+        st.session_state["saveQnAPair"] = False
+        st.rerun()
+elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] == False:
+    st.session_state.messages.append({"role": "assistant", "content": "Got it, let start over by. Please go ahead and ask a new question", 'type':'markdown'   })
+    resetPrompt()
+    
+#TODO: provide prompoting questions 
+#TODO: Restart question of as
+#TODO: save the conversation 
+#TODO: export coversation as pdf, email 
 else:
     st.stop()
-
-
