@@ -1,6 +1,4 @@
-import streamlit as st
 import time
-import streamlit as st
 from code_editor import code_editor
 #from utils.vanna_calls import *
 import streamlit as st
@@ -41,6 +39,18 @@ tab1,tab2 = st.tabs(['Chatbot',"🗃 SQL KnowledgeBase"])
 tab2.subheader("Training Data")
 tab2.dataframe(vn.get_training_data())
 
+def trainVN(input , type, question =None):
+    if type =='ddl':
+        vn.train(ddl=input)
+    elif type =='doc':
+        vn.train(documentation=input)
+    elif type =='sql':
+         # Check if question is provided
+        if question:
+            vn.train(sql=input, question=question)
+        else:
+            vn.train(sql=input)   
+
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "How can I help?" , "type":"markdown"}]
@@ -53,6 +63,10 @@ if "messages" not in st.session_state:
     st.session_state.tempCode =None
     st.session_state.enableUserTextInput =True
     st.session_state.saveQnAPair =None
+    st.session_state.ddl =None
+    st.session_state.doc =None
+    st.session_state.sqlQ =None
+    st.session_state.sqlA =None
     myQuestion = None
 
 def resetPrompt():
@@ -65,6 +79,10 @@ def resetPrompt():
     st.session_state['saveQnAPair'] =None
     st.session_state['tempCode'] =None
     st.session_state['enableUserTextInput'] =True
+    st.session_state['ddl'] =None
+    st.session_state['doc'] =None
+    st.session_state['sqlQ'] =None
+    st.session_state['sqlA'] =None
     myQuestion = None
     st.rerun()
 
@@ -79,7 +97,25 @@ def reRunClearApp():
     st.session_state['saveQnAPair'] =None
     st.session_state['tempCode'] =None
     st.session_state['enableUserTextInput'] =True
+    st.session_state['ddl'] =None
+    st.session_state['doc'] =None
+    st.session_state['sqlQ'] =None
+    st.session_state['sqlA'] =None
     myQuestion = None
+
+st.session_state['ddl']=tab2.text_area('Enter DDL information', value='', height=None, max_chars=None, key='ddl-input',disabled=True )
+st.session_state['doc']=tab2.text_area('Enter Documentation information:', value='', height=None, max_chars=None, key='doc-input',disabled=True)
+st.session_state['sqlQ']= tab2.text_area('Enter Question:', value='', height=None, max_chars=None, key='sqlQ-input',disabled=True)
+st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=None, max_chars=None, key='sqla-input',disabled=True)
+
+# if(st.session_state['sqlQ'] and st.session_state['sqlA']):
+#     trainVN(input =st.session_state['sqlQ'] , question=st.session_state['sqlA'], type ='sql')
+# if (st.session_state['doc']):
+#     trainVN(input =st.session_state['doc'], type ='doc')
+#     st.session_state["doc-input"] = ""
+# if (st.session_state['ddl']):
+#     trainVN(input =st.session_state['ddl'], type ='ddl')
+#     st.session_state["ddl-input"] = ""
 
 st.sidebar.title("Output Settings")
 st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
@@ -278,11 +314,11 @@ elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is 
         st.session_state["saveQnAPair"] = True
         st.rerun()
     elif plotyRadioInput == "No :x:":
-        st.session_state.messages.append({"role": "assistant", "content": "No, do not save the question and SQL answer-pair :x:", 'type':'markdown'   })
+        st.session_state.messages.append({"role": "user", "content": "No, do not save the question and SQL answer-pair :x:", 'type':'markdown'   })
         st.session_state["saveQnAPair"] = False
         st.rerun()
 elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] == False:
-    st.session_state.messages.append({"role": "assistant", "content": "Got it, let start over by. Please go ahead and ask a new question", 'type':'markdown'   })
+    st.session_state.messages.append({"role": "assistant", "content": "Got it, let start over. Please go ahead and ask a new question...", 'type':'markdown'   })
     resetPrompt()
     
 #TODO: provide prompoting questions 
