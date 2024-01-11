@@ -6,6 +6,9 @@ import streamlit as st
 #import vanna as vn
 from vanna.openai.openai_chat import OpenAI_Chat
 from vanna.chromadb.chromadb_vector import ChromaDB_VectorStore
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 
 class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
@@ -14,7 +17,15 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             OpenAI_Chat.__init__(self, config=config)
 
 
-vn= MyVanna(config={'api_key': 'XXXXX', 'model': 'gpt-3.5-turbo'})
+vn= MyVanna(
+    config={	
+        'api_type': 'azure',
+        'api_base': os.environ.get("AZUREOPENAIURL"),
+	    'api_version': '2023-05-15',
+	    'engine': os.environ.get("AZUREOPENAIENGINE"),
+	    'api_key': os.environ.get("AZUREOPENAIKEY"),
+})
+
 vn.connect_to_sqlite('biotech_database.db') 
 
 
@@ -90,10 +101,12 @@ if my_question:
                 "Happy",
                 options=["", "yes", "no"],
                 key="radio_sql",
-                index=0,
+                index=None,
             )
 
-        if happy_sql == "no":
+        if happy_sql == None:
+            st.stop()
+        elif happy_sql == "no":
             st.warning(
                 "Please fix the generated SQL code. Once you're done hit Shift + Enter to submit"
             )

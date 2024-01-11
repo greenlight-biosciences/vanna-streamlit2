@@ -28,8 +28,9 @@ poetry install --with dev
 If you're running the app locally, please add a `.env` file at the root of the project with your crendentials:
 
 ```bash
-VANNA_API_KEY=...
-GCP_PROJECT_ID=...
+AZUREOPENAIURL='https://XXXXXX.openai.azure.com/'
+AZUREOPENAIENGINE='gpt-4'
+AZUREOPENAIKEY=XXXXX
 ```
 
 To create a Vanna API key, please refer to this [link](https://vanna.ai/).
