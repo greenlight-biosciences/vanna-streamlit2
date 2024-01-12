@@ -36,9 +36,30 @@ st.set_page_config(layout="wide")
 st.title("Data G.E.N.I.E")
 tab1,tab2 = st.tabs(['Chatbot',"🗃 SQL KnowledgeBase"])
 
-tab2.subheader("Training Data")
-tab2.dataframe(vn.get_training_data())
 
+def deleteTraining():
+    selected_rows = selectedForDeletion[selectedForDeletion['Select']]
+    selected_values = selected_rows['id']
+
+    # Print selected IDs
+    print(selected_values)
+
+    # Iterate over selected IDs and remove training data
+    for id_value in selected_values:
+        try:
+            vn.remove_training_data(id_value)
+        except Exception as e:
+            print(f"Error removing training data for id {id_value}: {e}")
+
+
+
+tab2.subheader("Training Data")
+tab2.button('Delete Training',key='deleteTraining', on_click=deleteTraining)
+trainingData= vn.get_training_data()
+trainingData.insert(0, "Select", False)
+
+selectedForDeletion = tab2.data_editor(trainingData, hide_index=True, column_config={"Select": st.column_config.CheckboxColumn(required=True), "id":st.column_config.Column(width='small')},)
+print(selectedForDeletion)
 def trainVN(input , type, question =None):
     if type =='ddl':
         vn.train(ddl=input)
@@ -67,6 +88,7 @@ if "messages" not in st.session_state:
     st.session_state.doc =None
     st.session_state.sqlQ =None
     st.session_state.sqlA =None
+    st.session_state.enableTraining=False
     myQuestion = None
 
 def resetPrompt():
@@ -103,19 +125,26 @@ def reRunClearApp():
     st.session_state['sqlA'] =None
     myQuestion = None
 
-st.session_state['ddl']=tab2.text_area('Enter DDL information', value='', height=None, max_chars=None, key='ddl-input',disabled=True )
-st.session_state['doc']=tab2.text_area('Enter Documentation information:', value='', height=None, max_chars=None, key='doc-input',disabled=True)
-st.session_state['sqlQ']= tab2.text_area('Enter Question:', value='', height=None, max_chars=None, key='sqlQ-input',disabled=True)
-st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=None, max_chars=None, key='sqla-input',disabled=True)
+def trainQuestionAnswer(sqlQ=None,sqlA=None):
+    if(sqlA and sqlQ):
+        trainVN(input =sqlQ , question=sqlA, type ='sql')
+        st.session_state.sqlQ_input = ""
+        st.session_state.sqlA_input = ""
+def trainDoc(doc):
+    if (doc):
+        trainVN(input =doc, type ='doc')
+        st.session_state.doc_input = ""
+def trainDDL(ddl):
+    if (ddl):
+        trainVN(input =ddl, type ='ddl')
+        st.session_state.ddl_input = ""
 
-# if(st.session_state['sqlQ'] and st.session_state['sqlA']):
-#     trainVN(input =st.session_state['sqlQ'] , question=st.session_state['sqlA'], type ='sql')
-# if (st.session_state['doc']):
-#     trainVN(input =st.session_state['doc'], type ='doc')
-#     st.session_state["doc-input"] = ""
-# if (st.session_state['ddl']):
-#     trainVN(input =st.session_state['ddl'], type ='ddl')
-#     st.session_state["ddl-input"] = ""
+st.session_state['ddl']=tab2.text_area('Enter DDL information', value='', height=None, max_chars=None, key='ddl_input',disabled=st.session_state['enableTraining'] , on_change=trainDDL, args=(st.session_state['ddl'], ))
+st.session_state['doc']=tab2.text_area('Enter Documentation information:', value='', height=None, max_chars=None, key='doc_input',disabled=st.session_state['enableTraining'], on_change=trainDoc, args=(st.session_state['doc'], ))
+st.session_state['sqlQ']= tab2.text_area('Enter Question:', value='', height=None, max_chars=None, key='sqlQ_input',disabled=st.session_state['enableTraining'], on_change=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
+st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=None, max_chars=None, key='sqlA_input',disabled=st.session_state['enableTraining'], on_change=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
+
+
 
 st.sidebar.title("Output Settings")
 st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
@@ -172,7 +201,7 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
 
     if is_select_statement(st.session_state['tempSQL']) == False:
         #responses is not a select statement let user ask again
-        st.session_state.messages.append({"role": "assistant", "content": st.session_state['tempSQL'] , "type":"sql"})
+        st.session_state.messages.append({"role": "assistant", "content": st.session_state['tempSQL'] , "type":"markdown"})
         st.session_state['enableUserTextInput']=True
         st.session_state['prompt']=None
         st.session_state['tempSQL']=None
@@ -317,8 +346,8 @@ elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is 
         st.session_state.messages.append({"role": "user", "content": "No, do not save the question and SQL answer-pair :x:", 'type':'markdown'   })
         st.session_state["saveQnAPair"] = False
         st.rerun()
-elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] == False:
-    st.session_state.messages.append({"role": "assistant", "content": "Got it, let start over. Please go ahead and ask a new question...", 'type':'markdown'   })
+elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is not None:
+    st.session_state.messages.append({"role": "assistant", "content": "Got it, Im ready for your next question. Please go ahead and ask a new question...", 'type':'markdown'   })
     resetPrompt()
     
 #TODO: provide prompoting questions 
