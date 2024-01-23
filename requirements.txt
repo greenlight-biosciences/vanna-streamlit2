@@ -2,3 +2,4 @@ vanna[chromadb,openai]
 streamlit
 streamlit_code_editor
 python-dotenv
+bokeh
