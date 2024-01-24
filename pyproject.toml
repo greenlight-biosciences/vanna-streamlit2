@@ -14,7 +14,9 @@ kaleido = "0.2.1"
 vanna = {extras = ["chromadb","openai"], version = "^0.0.30"}
 db-dtypes = "^1.1.1"
 streamlit-code-editor = "^0.1.10"
-
+bokeh = "^2.0.0"
+altair = "^4.0.0"
+snowflake-connector-python = "^3.6.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.9.1"

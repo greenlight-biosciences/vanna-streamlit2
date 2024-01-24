@@ -2,8 +2,9 @@ import streamlit as st
 from myVanna  import *
 import os
 from dotenv import load_dotenv
-load_dotenv(".env")
+import snowflake.connector
 
+load_dotenv(".env")
 
 vn= MyVanna(
     config={	
@@ -14,8 +15,17 @@ vn= MyVanna(
         'model': "gpt-35-turbo",
 	    'api_key': os.environ.get("AZUREOPENAIKEY"),
 })
-vn.connect_to_sqlite('biotech_database.db') 
+# vn.connect_to_sqlite('biotech_database.db') 
 
+
+vn.connect_to_snowflake(
+    account=os.environ.get('ACCOUNT'),
+    username=os.environ.get('USER'),
+    password=os.environ.get('PASS'),
+    database=os.environ.get('DATABASE'),
+    role=os.environ.get('ROLE'),
+    schema=os.environ.get('SCHEMA')
+)
 
 
 def trainVN(input , type, question =None):
@@ -80,9 +90,3 @@ def trainDDL(ddl):
     if (ddl):
         trainVN(input =ddl, type ='ddl')
         st.session_state.ddl_input = ""
-
-def runTrainingPlan(self, type):
-        if type =='Snowflake':
-            self.get_training_plan_generic()
-        else:
-            self.get_training_plan_generic()

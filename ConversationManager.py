@@ -22,7 +22,16 @@ vn= MyVanna(
         'model': "gpt-35-turbo",
 	    'api_key': os.environ.get("AZUREOPENAIKEY"),
 })
-vn.connect_to_sqlite('biotech_database.db') 
+# vn.connect_to_sqlite('biotech_database.db') 
+
+vn.connect_to_snowflake(
+    account=os.environ.get('ACCOUNT'),
+    username=os.environ.get('USER'),
+    password=os.environ.get('PASS'),
+    database=os.environ.get('DATABASE'),
+    role=os.environ.get('ROLE'),
+    schema=os.environ.get('SCHEMA')
+)
 
 
 
@@ -77,25 +86,30 @@ def reRunClearApp():
     userResponse = None
 
 def trainQuestionAnswer(sqlQ=None,sqlA=None):
+    print('running trainQuestionAnswer traning')
+
     if(sqlA and sqlQ):
         trainVN(input =sqlQ , question=sqlA, type ='sql')
         st.session_state.sqlQ_input = ""
         st.session_state.sqlA_input = ""
 def trainDoc(doc):
+    print('running doc traning')
     if (doc):
         trainVN(input =doc, type ='doc')
         st.session_state.doc_input = ""
 
 def trainDDL(ddl):
+    print('running ddl traning')
+
     if (ddl):
         trainVN(input =ddl, type ='ddl')
         st.session_state.ddl_input = ""
 
-def runTrainingPlan(self, type):
-        if type =='Snowflake':
-            self.get_training_plan_generic()
-        else:
-            self.get_training_plan_generic()
+# def runTrainingPlan(self, type):
+#         if type =='Snowflake':
+#             self.get_training_plan_generic()
+#         else:
+#             self.get_training_plan_generic()
 
 from myVanna import MyVanna
 from utility import *
@@ -128,6 +142,8 @@ if "messages" not in st.session_state:
     st.session_state.figureInstructions=None
     st.session_state.userUpdateCode=None
     st.session_state.plottingLib='Plotly'
+    st.session_state.vnModel='PH General v1'
+
     userResponse = None
 
 def deleteTraining():
@@ -145,7 +161,7 @@ def deleteTraining():
 
 tab2.subheader("Training Data")
 tab2.button('Delete Training',key='deleteTraining', on_click=deleteTraining)
-tab2.button('Run Automated DB schema Training',key='autoTraining', on_click=runTrainingPlan, args=(os.environ.get("DATABASETYPE"),))
+tab2.button('Run Automated DB schema Training',key='autoTraining', on_click=vn.runTrainingPlanSnowflake )
 
 trainingData= vn.get_training_data()
 trainingData.insert(0, "Select", False)
@@ -168,6 +184,7 @@ st.sidebar.checkbox("Show Follow-up Questions", value=True, key="show_followup")
 st.sidebar.checkbox("Show Session State", value=True, key="show_sessionstate")
 st.sidebar.button("Rerun", on_click=reRunClearApp, use_container_width=True)
 st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0)
+st.session_state['vnModel']=st.sidebar.selectbox('Data Model',options=['PH General v1'],index=0)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
