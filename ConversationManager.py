@@ -63,6 +63,8 @@ def resetPrompt():
     st.session_state['sqlA'] =None
     st.session_state['figureInstructions'] =None
     st.session_state['userUpdateCode']=None
+    st.session_state['sqlInstructions'] =None
+    st.session_state['userUpdateSQL'] =None
     userResponse = None
     st.rerun()
 
@@ -83,6 +85,8 @@ def reRunClearApp():
     st.session_state['sqlA'] =None
     st.session_state['figureInstructions'] =None
     st.session_state['userUpdateCode']=None
+    st.session_state['sqlInstructions'] =None
+    st.session_state['userUpdateSQL'] =None
     userResponse = None
 
 def trainQuestionAnswer(sqlQ=None,sqlA=None):
@@ -143,6 +147,9 @@ if "messages" not in st.session_state:
     st.session_state.userUpdateCode=None
     st.session_state.plottingLib='Plotly'
     st.session_state.vnModel='PH General v1'
+    st.session_state.sqlInstructions =None
+    st.session_state.userUpdateSQL =None
+    
 
     userResponse = None
 
@@ -195,7 +202,13 @@ for message in st.session_state.messages:
         elif message["type"] =='sql':
             st.code(message["content"], language="sql", line_numbers=True)
         elif message["type"] =='dataframe':
-            st.dataframe(message["content"])
+            st.dataframe(message["df"])
+        elif message["type"] =='sql-dataframe':
+            col1, col2 = st.columns([2, 3], )
+            col1.markdown('Here is a the generated SQL query for your question:')
+            col1.code(message["sql"], language="sql", line_numbers=True)
+            col2.markdown('Data Preview (first 5 rows):')
+            col2.dataframe(message["df"])
         elif message["type"] =='figure-code':
             col1, col2 = st.columns([3, 2], )
             col1.markdown('Here is a figure for the data:')
@@ -239,16 +252,21 @@ if   userResponse :=  st.chat_input( "Ask me a question about your data", disabl
         st.session_state['prompt'] =userResponse
         st.session_state['enableUserTextInput']=False
         st.rerun()
-    elif(st.session_state['figureInstructions'] is  None):
+    elif(st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None):
+        st.session_state['enableUserTextInput']=False
+        st.session_state.messages.append({"role": "user", "content": userResponse,  'type':'markdown'   })
+        st.rerun()
+    elif(st.session_state['figureInstructions'] is None and st.session_state["tempCode"] is not None):
+        st.session_state.messages.append({"role": "user", "content": st.session_state["figureInstructions"],  'type':'markdown'   })
+        st.session_state["userUpdateCode"] = st.session_state["tempCode"] 
         st.session_state['figureInstructions'] =userResponse
         st.session_state['enableUserTextInput']=False
         st.rerun()
-
-
-elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None:   
+elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None and st.session_state['enableUserTextInput']==False:   
     print('entering 2') 
-    st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'])
+    st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'])
 
+    df = vn.run_sql(sql=st.session_state['tempSQL'])
     if is_select_statement(st.session_state['tempSQL']) == False:
         #responses is not a select statement let user ask again
         st.session_state.messages.append({"role": "assistant", "content": st.session_state['tempSQL'] , "type":"markdown"})
@@ -257,21 +275,20 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
         st.session_state['tempSQL']=None
         st.rerun()
     elif st.session_state.get("show_sql", True):
-        st.session_state.messages.append({"role": "assistant", "content": st.session_state['tempSQL'] , "type":"sql"})
+        st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] , 'df':df.head(5), "type":"sql-dataframe"})
         st.rerun()
     else:
         st.session_state['sql'] = st.session_state['tempSQL']
         st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
         st.rerun()
-
-elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None:
+elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None and st.session_state['sqlInstructions'] is None and st.session_state['enableUserTextInput'] == False :
     print('entering 3') 
     with st.chat_message("user"):
         sqlRadioInput = st.radio(
             "I would like to ...",
-            options=["Edit :pencil2:", "OK :white_check_mark:"],
+            options=["Instruct Changes","Edit :pencil2:", "OK :white_check_mark:"],
             index=None,
-            captions = ["Edit the SQL", "Use generated SQL"],
+            captions = ["Tell the Data GENIE how the SQL query should be updated","Edit the SQL", "Use generated SQL"],
             horizontal = True
         )
 
@@ -295,26 +312,29 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
         st.session_state['sql']=st.session_state['tempSQL']
         st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
         st.rerun() 
+    elif sqlRadioInput == "Instruct Changes":
+        print('entering Instruct Changes')   
+        st.session_state['enableUserTextInput'] = True
+        st.session_state["tempSQL"] = None
+        st.rerun()
     else:
         st.stop()
 
-elif st.session_state["df"] is not None and st.session_state["tempCode"] is None:
+elif st.session_state["df"] is not None and st.session_state["tempCode"] is None :
     print('entering 3')   
     df = st.session_state.get("df")
     if st.session_state.get("show_table", True):
-        if len(df) > 10:
-                #st.text("First 10 rows of data")
-                #st.dataframe(df.head(10))
-                st.session_state.messages.append({"role": "assistant", "content": "First 10 rows of data"  , "type":"markdown"})
-                st.session_state.messages.append({"role": "assistant", "content": df.head(10) , "type":"dataframe" })
+        if len(df) > 5:
+            st.session_state.messages.append({"role": "assistant", "content": "First 5 rows of data"  , "type":"markdown"})
+            st.session_state.messages.append({"role": "assistant", "df": df.head(5) , "type":"dataframe" })
         elif len(df) == 0:
             st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", "content": df , "type":"dataframe" })
+            st.session_state.messages.append({"role": "assistant", "df": df , "type":"dataframe" })
             st.session_state.messages.append({"role": "assistant", "content": "Query returned zero rows, unable to make a figure please try again with a new question"  , "type":"markdown"})
             resetPrompt()
         else:
             st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", "content": df , "type":"dataframe" })
+            st.session_state.messages.append({"role": "assistant", "df": df , "type":"dataframe" })
             #st.dataframe(df)
 
     if st.session_state['figureInstructions'] is None:
@@ -335,7 +355,6 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
         else:
             st.session_state.messages.append({"role": "assistant", "content":"I couldn't generate a chart" , 'type':'error' })
         st.rerun()
-
 elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None  and st.session_state["figureInstructions"] is None and st.session_state['enableUserTextInput'] == False:
     print('entering 4') 
     with st.chat_message("user"):
@@ -343,7 +362,7 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
                 "I would like to ...",
                 options=["Instruct Changes","Edit Code Manually :pencil2:", "OK :white_check_mark:"],
                 index=None,
-                captions = ["Tell the Chat Bot how the figure should be updated","Edit the Plot code", "Use generated Plot code"],
+                captions = ["Tell the Data GENIE how the figure should be updated","Edit the Plot code", "Use generated Plot code"],
                 horizontal = True
             )
     if plotyRadioInput == "Edit Code Manually :pencil2:":
@@ -373,13 +392,13 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
     else:
         st.stop()
         
-elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None  and st.session_state["figureInstructions"] is not None:
-    print('entering 4.5') 
-    st.session_state.messages.append({"role": "user", "content": st.session_state["figureInstructions"],  'type':'markdown'   })
-    st.session_state["userUpdateCode"] = st.session_state["tempCode"] 
-    # st.session_state["figureInstructions"] = None
-    st.session_state["tempCode"] = None
-    st.rerun()
+# elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None  and st.session_state["figureInstructions"] is not None:
+#     print('entering 4.5') 
+#     st.session_state.messages.append({"role": "user", "content": st.session_state["figureInstructions"],  'type':'markdown'   })
+#     st.session_state["userUpdateCode"] = st.session_state["tempCode"] 
+#     # st.session_state["figureInstructions"] = None
+#     st.session_state["tempCode"] = None
+#     st.rerun()
 
 elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is None:
 

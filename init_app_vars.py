@@ -40,41 +40,41 @@ def trainVN(input , type, question =None):
         else:
             vn.train(sql=input)   
 
-def resetPrompt():
-    st.session_state['prompt'] = None
-    st.session_state['sql'] =None
-    st.session_state['code'] =None
-    st.session_state['df'] =None
-    st.session_state['fig'] =None
-    st.session_state['tempSQL'] =None
-    st.session_state['saveQnAPair'] =None
-    st.session_state['tempCode'] =None
-    st.session_state['enableUserTextInput'] =True
-    st.session_state['ddl'] =None
-    st.session_state['doc'] =None
-    st.session_state['sqlQ'] =None
-    st.session_state['sqlA'] =None
-    st.session_state['figureInstructions'] =None
-    userResponse = None
-    st.rerun()
+# def resetPrompt():
+#     st.session_state['prompt'] = None
+#     st.session_state['sql'] =None
+#     st.session_state['code'] =None
+#     st.session_state['df'] =None
+#     st.session_state['fig'] =None
+#     st.session_state['tempSQL'] =None
+#     st.session_state['saveQnAPair'] =None
+#     st.session_state['tempCode'] =None
+#     st.session_state['enableUserTextInput'] =True
+#     st.session_state['ddl'] =None
+#     st.session_state['doc'] =None
+#     st.session_state['sqlQ'] =None
+#     st.session_state['sqlA'] =None
+#     st.session_state['figureInstructions'] =None
+#     userResponse = None
+#     st.rerun()
 
-def reRunClearApp():
-    st.session_state['messages']= [{"role": "assistant", "content": "How can I help?" , "type":"markdown"}]
-    st.session_state['prompt'] = None
-    st.session_state['sql'] =None
-    st.session_state['code'] =None
-    st.session_state['df'] =None
-    st.session_state['fig'] =None
-    st.session_state['tempSQL'] =None
-    st.session_state['saveQnAPair'] =None
-    st.session_state['tempCode'] =None
-    st.session_state['enableUserTextInput'] =True
-    st.session_state['ddl'] =None
-    st.session_state['doc'] =None
-    st.session_state['sqlQ'] =None
-    st.session_state['sqlA'] =None
-    st.session_state['figureInstructions'] =None
-    userResponse = None
+# def reRunClearApp():
+#     st.session_state['messages']= [{"role": "assistant", "content": "How can I help?" , "type":"markdown"}]
+#     st.session_state['prompt'] = None
+#     st.session_state['sql'] =None
+#     st.session_state['code'] =None
+#     st.session_state['df'] =None
+#     st.session_state['fig'] =None
+#     st.session_state['tempSQL'] =None
+#     st.session_state['saveQnAPair'] =None
+#     st.session_state['tempCode'] =None
+#     st.session_state['enableUserTextInput'] =True
+#     st.session_state['ddl'] =None
+#     st.session_state['doc'] =None
+#     st.session_state['sqlQ'] =None
+#     st.session_state['sqlA'] =None
+#     st.session_state['figureInstructions'] =None
+#     userResponse = None
 
 def trainQuestionAnswer(sqlQ=None,sqlA=None):
     if(sqlA and sqlQ):

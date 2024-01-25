@@ -7,18 +7,22 @@ import snowflake.connector
 import pandas as pd
 from vanna.exceptions import DependencyError, ImproperlyConfigured, ValidationError
 import os
+import re
 
 class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
     def __init__(self, config=None):
         ChromaDB_VectorStore.__init__(self, config=config)
         OpenAI_Chat.__init__(self, config=config)
+        #VannaBase.__init__(self, config=config)
 
     # def get_models():
     #     return get_models()
     
     # def set_model():
     #     return set_model()
-    
+    def log(self, message: str):
+        print(message)
+        
     def generate_plotly_code(
         self, question: str = None, sql: str = None, df_metadata: str = None,  chart_instructions: Union[str, None] = None, plottingLib: str = 'Plotly', **kwargs
     ) -> str:
@@ -177,6 +181,97 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         plan = self.get_training_plan_snowflake()
         self.train(plan=plan)
 
+    def get_sql_prompt(
+        self,
+        question: str,
+        question_sql_list: list,
+        ddl_list: list,
+        doc_list: list,
+        questionConversationHistory: list,
+        questionMemoryLen: int = 2,
+        **kwargs,
+    ):
+        initial_prompt = "The user provides a question and you provide SQL. You will only respond with SQL code and not with any explanations.\n\nRespond with only SQL code. In the SQL code, do your best to provide nicely named columns along additional metadata columns to answer the question. Do not answer with any explanations -- just the code.\n"
+
+        initial_prompt = OpenAI_Chat.add_ddl_to_prompt(
+            initial_prompt, ddl_list, max_tokens=14000
+        )
+
+        initial_prompt = OpenAI_Chat.add_documentation_to_prompt(
+            initial_prompt, doc_list, max_tokens=14000
+        )
+
+        message_log = [OpenAI_Chat.system_message(initial_prompt)]
+
+        for example in question_sql_list:
+            if example is None:
+                print("example is None")
+            else:
+                if example is not None and "question" in example and "sql" in example:
+                    message_log.append(OpenAI_Chat.user_message(example["question"]))
+                    message_log.append(OpenAI_Chat.assistant_message(example["sql"]))
+
+        message_log.append({"role": "user", "content": question})
+        msgHistory = questionMemoryLen*-1
+
+        if(questionMemoryLen < len(questionConversationHistory)):
+            for message in questionConversationHistory[msgHistory:]:
+                if message["type"] =='markdown':
+                    message_log.append({"role": message['role'], "content":message["content"]})
+                elif message["type"] =='code':
+                    message_log.append({"role": message['role'], "content":message["content"]})
+                elif message["type"] =='sql':
+                    message_log.append({"role": message['role'], "content":message["content"]})
+                elif message["type"] =='dataframe':
+                    message_log.append({"role": message['role'], "content":message["df"].to_string()})
+                elif message["type"] =='sql-dataframe':
+                    message_log.append({"role": message['role'], "content":'Here is a the generated SQL query for your question:'})
+                    message_log.append({"role": message['role'], "content":message["sql"]})
+                    message_log.append({"role": message['role'], "content":'Data Preview (first 5 rows):'})
+                    message_log.append({"role": message['role'], "content":message["df"].to_string()})
+                elif message["type"] =='figure-code':
+                    message_log.append({"role": message['role'], "content":'Here is a figure for the data: <img>'})
+                    message_log.append({"role": message['role'], "content":'Here is the code for the figure:'})
+                    message_log.append({"role": message['role'], "content":message["code"]})
+                elif message["type"] =='figure':
+                    message_log.append({"role": message['role'], "content":'<img>'})
+                elif  message["type"] =='error':
+                    message_log.append({"role": message['role'], "content":message["content"]})
+                else:
+                    message_log.append({"role": message['role'], "content":message["content"]})
+
+        # print(message_log)
+        return message_log
+    
+    def extract_sql(self, llm_response: str) -> str:
+        # If the llm_response contains a markdown code block, with or without the sql tag, extract the sql from it
+        sql = re.search(r"```sql\n(.*)```", llm_response, re.DOTALL)
+        if sql:
+            self.log(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            return sql.group(1)
+
+        sql = re.search(r"```(.*)```", llm_response, re.DOTALL)
+        if sql:
+            self.log(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            return sql.group(1)
+
+        return llm_response
+    
+    def generate_sql(self, question: str,questionConversationHistory:list, **kwargs) -> str:
+        question_sql_list = self.get_similar_question_sql(question, **kwargs)
+        ddl_list = self.get_related_ddl(question, **kwargs)
+        doc_list = self.get_related_documentation(question, **kwargs)
+        prompt = self.get_sql_prompt(
+            question=question,
+            question_sql_list=question_sql_list,
+            ddl_list=ddl_list,
+            doc_list=doc_list,
+            questionConversationHistory=questionConversationHistory,
+            **kwargs,
+        )
+        llm_response = self.submit_prompt(prompt, **kwargs)
+        print(llm_response)
+        return self.extract_sql(llm_response)
     # def get_similar_question_sql(self, question: str, tag=None, **kwargs) -> list:
     #     query_params = {
     #         "query_texts": [question],
