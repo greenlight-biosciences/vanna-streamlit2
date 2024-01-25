@@ -22,7 +22,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
     #     return set_model()
     def log(self, message: str):
         print(message)
-        
+
     def generate_plotly_code(
         self, question: str = None, sql: str = None, df_metadata: str = None,  chart_instructions: Union[str, None] = None, plottingLib: str = 'Plotly', **kwargs
     ) -> str:
@@ -191,7 +191,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         questionMemoryLen: int = 2,
         **kwargs,
     ):
-        initial_prompt = "The user provides a question and you provide SQL. You will only respond with SQL code and not with any explanations.\n\nRespond with only SQL code. In the SQL code, do your best to provide nicely named columns along additional metadata columns to answer the question. Do not answer with any explanations -- just the code.\n"
+        initial_prompt = "The user provides a question and you provide SQL. You will only respond with SQL code and not with any explanations.\n\nRespond with ONLY with SQL code from 'SELECT' to the ';'. In the SQL code, do your best to provide nicely named columns along additional metadata columns to answer the question. Do not answer with any explanations -- just the select statement code 'SELECT' to the ';'.\n"
 
         initial_prompt = OpenAI_Chat.add_ddl_to_prompt(
             initial_prompt, ddl_list, max_tokens=14000
@@ -249,12 +249,17 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         if sql:
             self.log(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
-
+        # Regular expression pattern to match a SQL query
+        sql = re.search(r"(SELECT\s+.*?;)", llm_response,  re.IGNORECASE | re.DOTALL)
+        if sql:
+            self.log(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            return sql.group(1)
+        
         sql = re.search(r"```(.*)```", llm_response, re.DOTALL)
         if sql:
             self.log(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
-
+        
         return llm_response
     
     def generate_sql(self, question: str,questionConversationHistory:list, **kwargs) -> str:
@@ -270,7 +275,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             **kwargs,
         )
         llm_response = self.submit_prompt(prompt, **kwargs)
-        print(llm_response)
+        # print(llm_response)
         return self.extract_sql(llm_response)
     # def get_similar_question_sql(self, question: str, tag=None, **kwargs) -> list:
     #     query_params = {

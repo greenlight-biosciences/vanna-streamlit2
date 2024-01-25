@@ -6,6 +6,7 @@ import streamlit as st
 # import os
 import streamlit as st
 # from bokeh.plotting import figure
+from datetime import datetime
 
 from myVanna  import *
 import os
@@ -65,6 +66,8 @@ def resetPrompt():
     st.session_state['userUpdateCode']=None
     st.session_state['sqlInstructions'] =None
     st.session_state['userUpdateSQL'] =None
+    st.session_state['textInputHelp'] =None
+
     userResponse = None
     st.rerun()
 
@@ -87,6 +90,8 @@ def reRunClearApp():
     st.session_state['userUpdateCode']=None
     st.session_state['sqlInstructions'] =None
     st.session_state['userUpdateSQL'] =None
+    st.session_state['textInputHelp'] =None
+    st.session_state['textInputHelp'] =0
     userResponse = None
 
 def trainQuestionAnswer(sqlQ=None,sqlA=None):
@@ -149,8 +154,8 @@ if "messages" not in st.session_state:
     st.session_state.vnModel='PH General v1'
     st.session_state.sqlInstructions =None
     st.session_state.userUpdateSQL =None
-    
-
+    st.session_state.textInputHelp =None
+    st.session_state.uniqWidgetCounter =0
     userResponse = None
 
 def deleteTraining():
@@ -163,7 +168,26 @@ def deleteTraining():
             vn.remove_training_data(id_value)
         except Exception as e:
             print(f"Error removing training data for id {id_value}: {e}")
+@st.cache_data 
+def convert_df(df):
+    # IMPORTANT: Cache the conversion to prevent computation on every rerun
+    return df.to_csv().encode('utf-8')
 
+
+def generate_fileName():
+    # Get the current time and format it as a string
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Use the formatted time string in the filename
+    return f'{current_time}-DataGenieExport.csv'
+
+
+def generate_uniqObjectName(object:str='obj'):
+    # Get the current time and format it as a string
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    st.session_state["uniqWidgetCounter"] = st.session_state["uniqWidgetCounter"] +1
+    # Use the formatted time string in the filename
+    return f'{current_time}-{object}-{st.session_state["uniqWidgetCounter"]}'
 
 
 tab2.subheader("Training Data")
@@ -201,14 +225,36 @@ for message in st.session_state.messages:
             st.code(message["content"], language="python", line_numbers=True )
         elif message["type"] =='sql':
             st.code(message["content"], language="sql", line_numbers=True)
-        elif message["type"] =='dataframe':
+        elif message["type"] =='dataframe-preview':
+            st.markdown('Data Preview (first 5 rows):')
             st.dataframe(message["df"])
+            st.download_button(
+                key=generate_uniqObjectName('df-download2'),
+                label=":floppy_disk: Download All Data as CSV",
+                data=convert_df(message["df"]),
+                file_name=generate_fileName(),
+                mime='text/csv',) 
+        elif message["type"] =='dataframe':
+            st.markdown(f'Data (first {message["nrows"]} rows):')
+            st.dataframe(message["df"])
+            st.download_button(
+                key=generate_uniqObjectName('df-download2'),
+                label=":floppy_disk: Download All Data as CSV",
+                data=convert_df(message["df"]),
+                file_name=generate_fileName(),
+                mime='text/csv',) 
         elif message["type"] =='sql-dataframe':
             col1, col2 = st.columns([2, 3], )
             col1.markdown('Here is a the generated SQL query for your question:')
             col1.code(message["sql"], language="sql", line_numbers=True)
-            col2.markdown('Data Preview (first 5 rows):')
+            col2.markdown(f"Data Preview (first {message['nrows']} rows):")
             col2.dataframe(message["df"])
+            col2.download_button(
+                key=generate_uniqObjectName('df-download2'),
+                label=":floppy_disk: Download All Data as CSV",
+                data=convert_df(message["df"]),
+                file_name=generate_fileName(),
+                mime='text/csv',)
         elif message["type"] =='figure-code':
             col1, col2 = st.columns([3, 2], )
             col1.markdown('Here is a figure for the data:')
@@ -233,7 +279,7 @@ if st.session_state.get('show_sessionstate',True):
     st.sidebar.write(st.session_state)
 
     
-if   userResponse :=  st.chat_input( "Ask me a question about your data", disabled= not st.session_state['enableUserTextInput'] ) :
+if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHelp']), disabled= not st.session_state['enableUserTextInput'] ) :
 
     print('entering 1')
     # with st.chat_message("assistant"):and st.session_state['enableUserTextInput'] is True 
@@ -257,16 +303,17 @@ if   userResponse :=  st.chat_input( "Ask me a question about your data", disabl
         st.session_state.messages.append({"role": "user", "content": userResponse,  'type':'markdown'   })
         st.rerun()
     elif(st.session_state['figureInstructions'] is None and st.session_state["tempCode"] is not None):
-        st.session_state.messages.append({"role": "user", "content": st.session_state["figureInstructions"],  'type':'markdown'   })
-        st.session_state["userUpdateCode"] = st.session_state["tempCode"] 
         st.session_state['figureInstructions'] =userResponse
+        st.session_state["userUpdateCode"] = st.session_state["tempCode"] 
         st.session_state['enableUserTextInput']=False
+        st.session_state["tempCode"] =None
+        st.session_state.messages.append({"role": "user", "content": st.session_state["figureInstructions"],  'type':'markdown'   })
         st.rerun()
 elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None and st.session_state['enableUserTextInput']==False:   
     print('entering 2') 
+
     st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'])
 
-    df = vn.run_sql(sql=st.session_state['tempSQL'])
     if is_select_statement(st.session_state['tempSQL']) == False:
         #responses is not a select statement let user ask again
         st.session_state.messages.append({"role": "assistant", "content": st.session_state['tempSQL'] , "type":"markdown"})
@@ -274,24 +321,23 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
         st.session_state['prompt']=None
         st.session_state['tempSQL']=None
         st.rerun()
-    elif st.session_state.get("show_sql", True):
-        st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] , 'df':df.head(5), "type":"sql-dataframe"})
-        st.rerun()
     else:
-        st.session_state['sql'] = st.session_state['tempSQL']
-        st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
+        # st.session_state['sql'] = st.session_state['tempSQL']
+        st.session_state["df"] = vn.run_sql(sql=st.session_state['tempSQL'])
+        if st.session_state.get("show_sql", True):
+            st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] , 'df':st.session_state["df"].head(5), 'nrows':'5',"type":"sql-dataframe"})
         st.rerun()
 elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None and st.session_state['sqlInstructions'] is None and st.session_state['enableUserTextInput'] == False :
     print('entering 3') 
     with st.chat_message("user"):
         sqlRadioInput = st.radio(
             "I would like to ...",
-            options=["Instruct Changes","Edit :pencil2:", "OK :white_check_mark:"],
+            options=["Instruct Changes (SQL):speaking_head_in_silhouette:","Edit :pencil2:", "OK :white_check_mark:"],
             index=None,
-            captions = ["Tell the Data GENIE how the SQL query should be updated","Edit the SQL", "Use generated SQL"],
+            captions = ["Tell Data GENIE how the SQL query should be updated","Edit the SQL", "Use generated SQL query"],
             horizontal = True
         )
-
+    st.session_state['textInputHelp'] =sqlRadioInput
     if sqlRadioInput == "Edit :pencil2:":
         st.warning("Please update the generated SQL code. Once you're done hit Shift + Enter to submit" )
         
@@ -312,29 +358,30 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
         st.session_state['sql']=st.session_state['tempSQL']
         st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
         st.rerun() 
-    elif sqlRadioInput == "Instruct Changes":
+    elif sqlRadioInput == "Instruct Changes (SQL):speaking_head_in_silhouette:":
         print('entering Instruct Changes')   
         st.session_state['enableUserTextInput'] = True
         st.session_state["tempSQL"] = None
+        st.session_state["df"] = None
         st.rerun()
     else:
         st.stop()
 
-elif st.session_state["df"] is not None and st.session_state["tempCode"] is None :
+elif st.session_state["df"] is not None and st.session_state["tempCode"] is None  and st.session_state["enableUserTextInput"] == False :
     print('entering 3')   
     df = st.session_state.get("df")
-    if st.session_state.get("show_table", True):
-        if len(df) > 5:
-            st.session_state.messages.append({"role": "assistant", "content": "First 5 rows of data"  , "type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", "df": df.head(5) , "type":"dataframe" })
+    if st.session_state.get("show_table", True) and st.session_state.get("userUpdateCode") is None:
+        if len(df) > 10:
+            st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query (first 10 rows):"  , "type":"markdown"})
+            st.session_state.messages.append({"role": "assistant", "df": df.head(10) ,"nrows": 10, "type":"dataframe" })
         elif len(df) == 0:
             st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", "df": df , "type":"dataframe" })
+            st.session_state.messages.append({"role": "assistant", "df": df ,"nrows": '0', "type":"dataframe" })
             st.session_state.messages.append({"role": "assistant", "content": "Query returned zero rows, unable to make a figure please try again with a new question"  , "type":"markdown"})
             resetPrompt()
         else:
             st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", "df": df , "type":"dataframe" })
+            st.session_state.messages.append({"role": "assistant", "df": df ,"nrows": 'All', "type":"dataframe" })
             #st.dataframe(df)
 
     if st.session_state['figureInstructions'] is None:
@@ -343,13 +390,13 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
         st.session_state["tempCode"] = vn.edit_plotly_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df=st.session_state["df"],chart_instructions=st.session_state["figureInstructions"],chart_code=st.session_state["userUpdateCode"],plottingLib=st.session_state['plottingLib']  )
         st.session_state['figureInstructions'] = None
 
-    st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
-
     if st.session_state.get("show_plotly_code", True):
+        st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
         st.session_state.messages.append({"role": "assistant", "figure": st.session_state["fig"] ,'code':st.session_state["tempCode"], "type":"figure-code" })
         st.rerun()
     elif st.session_state.get("show_chart", True):
         if st.session_state["fig"] is not None:
+            st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
             st.session_state.messages.append({"role": "assistant", "content": f"For your question: {st.session_state['prompt']} - we prepared this final figure:"  , "type":"markdown"})
             st.session_state.messages.append({"role": "assistant", "content": st.session_state["fig"]  , 'type':'figure' })
         else:
@@ -360,11 +407,13 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
     with st.chat_message("user"):
         plotyRadioInput = st.radio(
                 "I would like to ...",
-                options=["Instruct Changes","Edit Code Manually :pencil2:", "OK :white_check_mark:"],
+                options=["Instruct Changes (Figure):speaking_head_in_silhouette:","Edit Code Manually :pencil2:", "OK :white_check_mark:",'Instruct Changes (SQL) :rewind:'],
                 index=None,
-                captions = ["Tell the Data GENIE how the figure should be updated","Edit the Plot code", "Use generated Plot code"],
+                captions = ["Tell Data GENIE how the figure should be updated","Edit the Plot code", "Use generated Plot code",'Go back a step and tell Data GENIE to modify the SQL query'],
                 horizontal = True
             )
+    
+    st.session_state['textInputHelp'] =plotyRadioInput
     if plotyRadioInput == "Edit Code Manually :pencil2:":
         
         st.warning("Please fix the generated Python code. Once you're done hit Shift + Enter to submit")
@@ -384,10 +433,23 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
         st.session_state.messages.append({"role": "assistant", "content": "Do you want to save this question and SQL answer-pair to my knowledge base?"  , "type":"markdown"})
         st.session_state["code"] = st.session_state["tempCode"]
         st.rerun()
-    elif plotyRadioInput == "Instruct Changes":
-        print('entering Instruct Changes')   
+    elif plotyRadioInput == 'Instruct Changes (Figure):speaking_head_in_silhouette:':
+        print('entering Instruct Changes (Figure)')   
         st.session_state['enableUserTextInput'] = True
         st.session_state["fig"] = None
+        # st.session_state["tempCode"] =None
+        st.rerun()
+    elif plotyRadioInput == 'Instruct Changes (SQL) :rewind:':
+        print('entering Instruct Changes (SQL)')   
+        st.session_state.messages.append({"role": "assistant", "content": "Here is the SQL query we have been using, let me know how you wish to change it:"  , "type":"markdown"})
+        st.session_state.messages.append({"role": "assistant", "content":  st.session_state['sql'] , "type":"sql"})
+        st.session_state['enableUserTextInput'] = True
+        st.session_state["tempCode"] =None
+        st.session_state["fig"] = None
+        st.session_state["df"] =None
+        st.session_state["tempSQL"] =None
+        st.session_state["sql"] =None
+        st.session_state["code"]=None
         st.rerun()
     else:
         st.stop()
@@ -411,6 +473,8 @@ elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is 
                 captions = ["Yes, Save the question and SQL answer-pair", "No, do not save"],
                 horizontal = True
             )
+    st.session_state['textInputHelp'] =plotyRadioInput
+
     if plotyRadioInput == "Yes :floppy_disk:":
         st.session_state.messages.append({"role": "user", "content": "Yes, Save the question and SQL answer-pair :floppy_disk:", 'type':"markdown" })
         vn.add_question_sql(st.session_state["prompt"],st.session_state["sql"])
