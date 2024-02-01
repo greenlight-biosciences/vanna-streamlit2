@@ -1,16 +1,15 @@
 import time
 from code_editor import code_editor
-#from utils.vanna_calls import *
 import streamlit as st
-#import vanna as vn
-# import os
 import streamlit as st
-# from bokeh.plotting import figure
 from datetime import datetime
-
+from utility import *
 from myVanna  import *
 import os
 from dotenv import load_dotenv
+from streamlit_modal import Modal
+
+
 load_dotenv(".env")
 
 
@@ -36,18 +35,6 @@ vn.connect_to_snowflake(
 
 
 
-def trainVN(input , type, question =None):
-    if type =='ddl':
-        vn.train(ddl=input)
-    elif type =='doc':
-        vn.train(documentation=input)
-    elif type =='sql':
-         # Check if question is provided
-        if question:
-            vn.train(sql=input, question=question)
-        else:
-            vn.train(sql=input)   
-
 def resetPrompt():
     st.session_state['prompt'] = None
     st.session_state['sql'] =None
@@ -67,6 +54,7 @@ def resetPrompt():
     st.session_state['sqlInstructions'] =None
     st.session_state['userUpdateSQL'] =None
     st.session_state['textInputHelp'] =None
+    st.session_state['enablePlottingDataModelChange'] =True
 
     userResponse = None
     st.rerun()
@@ -91,27 +79,29 @@ def reRunClearApp():
     st.session_state['sqlInstructions'] =None
     st.session_state['userUpdateSQL'] =None
     st.session_state['textInputHelp'] =None
-    st.session_state['textInputHelp'] =0
+    st.session_state['uniqWidgetCounter'] =0
+    st.session_state['sqlRadioInput'] =None
+    st.session_state['enablePlottingDataModelChange'] =True
     userResponse = None
 
 def trainQuestionAnswer(sqlQ=None,sqlA=None):
     print('running trainQuestionAnswer traning')
 
     if(sqlA and sqlQ):
-        trainVN(input =sqlQ , question=sqlA, type ='sql')
+        vn.trainVN(input =sqlQ , question=sqlA, type ='sql')
         st.session_state.sqlQ_input = ""
         st.session_state.sqlA_input = ""
 def trainDoc(doc):
     print('running doc traning')
     if (doc):
-        trainVN(input =doc, type ='doc')
+        vn.trainVN(input =doc, type ='doc')
         st.session_state.doc_input = ""
 
 def trainDDL(ddl):
     print('running ddl traning')
 
     if (ddl):
-        trainVN(input =ddl, type ='ddl')
+        vn.trainVN(input =ddl, type ='ddl')
         st.session_state.ddl_input = ""
 
 # def runTrainingPlan(self, type):
@@ -120,18 +110,17 @@ def trainDDL(ddl):
 #         else:
 #             self.get_training_plan_generic()
 
-from myVanna import MyVanna
-from utility import *
 # from init_app_vars import *
 # from typing import Union
 
-
-st.set_page_config(layout="wide")
-st.title("Data G.E.N.I.E")
+appTitle = os.environ.get("APPTITLE")
+menu_items ={"Get help":os.environ.get("GETHELPURL"), "Report a Bug":os.environ.get("SUBMITTICKETURL") }
+st.set_page_config(layout="wide", page_title =appTitle, menu_items =menu_items )
+st.title(appTitle)
 tab1,tab2 = st.tabs(['Chatbot',"🗃 SQL KnowledgeBase"])
 
 
-# Initialize chat history
+# Initialize app state variables
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "How can I help?" , "type":"markdown"}]
     st.session_state.prompt = None
@@ -156,6 +145,8 @@ if "messages" not in st.session_state:
     st.session_state.userUpdateSQL =None
     st.session_state.textInputHelp =None
     st.session_state.uniqWidgetCounter =0
+    st.session_state.sqlRadioInput = None
+    st.session_state.enablePlottingDataModelChange = True
     userResponse = None
 
 def deleteTraining():
@@ -168,6 +159,7 @@ def deleteTraining():
             vn.remove_training_data(id_value)
         except Exception as e:
             print(f"Error removing training data for id {id_value}: {e}")
+
 @st.cache_data 
 def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
@@ -211,11 +203,16 @@ st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
 st.sidebar.checkbox("Show Table", value=True, key="show_table")
 st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
 st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
-st.sidebar.checkbox("Show Follow-up Questions", value=True, key="show_followup")
-st.sidebar.checkbox("Show Session State", value=True, key="show_sessionstate")
-st.sidebar.button("Rerun", on_click=reRunClearApp, use_container_width=True)
-st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0)
-st.session_state['vnModel']=st.sidebar.selectbox('Data Model',options=['PH General v1'],index=0)
+st.sidebar.checkbox("Show Follow-up Questions", value=False, key="show_followup")
+st.sidebar.checkbox("Show Session State", value=False, key="show_sessionstate")
+st.sidebar.button("Reset/Clear Conversation", on_click=reRunClearApp, use_container_width=True)
+st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which plotting library chat app uses for generating figures (Note:Changing the plotting library is only allowed at the start of a new conversation)')
+st.session_state['vnModel']=st.sidebar.selectbox('Data Mart',options=['PH General v1'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
+
+@st.cache_data
+def cache_describeSQLData(prompt: str = None, sql:str =None, additionalInstructions:str =None, df_describe:str =None):
+    return vn.describeSQLData(df_describe=df_describe, sql=sql, question=prompt,additionalInstructions=additionalInstructions)
+
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -225,51 +222,75 @@ for message in st.session_state.messages:
             st.code(message["content"], language="python", line_numbers=True )
         elif message["type"] =='sql':
             st.code(message["content"], language="sql", line_numbers=True)
-        elif message["type"] =='dataframe-preview':
-            st.markdown('Data Preview (first 5 rows):')
-            st.dataframe(message["df"])
-            st.download_button(
-                key=generate_uniqObjectName('df-download2'),
-                label=":floppy_disk: Download All Data as CSV",
-                data=convert_df(message["df"]),
-                file_name=generate_fileName(),
-                mime='text/csv',) 
+        # elif message["type"] =='dataframe-preview':
+        #     st.markdown('Data Preview (first 5 rows):')
+        #     st.dataframe(message["df"])
+        #     st.download_button(
+        #         key=generate_uniqObjectName('df-download2'),
+        #         label=":floppy_disk: Download All Data as CSV",
+        #         data=convert_df(message["df"]),
+        #         file_name=generate_fileName(),
+        #         mime='text/csv', disabled=message["df"].empty) 
         elif message["type"] =='dataframe':
             st.markdown(f'Data (first {message["nrows"]} rows):')
-            st.dataframe(message["df"])
+            st.dataframe(message["df"].head(int(message["nrows"])))
             st.download_button(
                 key=generate_uniqObjectName('df-download2'),
                 label=":floppy_disk: Download All Data as CSV",
                 data=convert_df(message["df"]),
                 file_name=generate_fileName(),
-                mime='text/csv',) 
+                mime='text/csv',disabled=message["df"].empty) 
         elif message["type"] =='sql-dataframe':
-            col1, col2 = st.columns([2, 3], )
+            col1, col2 ,col3= st.columns([2, 2,1], )
             col1.markdown('Here is a the generated SQL query for your question:')
             col1.code(message["sql"], language="sql", line_numbers=True)
             col2.markdown(f"Data Preview (first {message['nrows']} rows):")
-            col2.dataframe(message["df"])
+            col2.dataframe(message["df"].head(int(message["nrows"])))
             col2.download_button(
                 key=generate_uniqObjectName('df-download2'),
                 label=":floppy_disk: Download All Data as CSV",
                 data=convert_df(message["df"]),
                 file_name=generate_fileName(),
-                mime='text/csv',)
+                mime='text/csv',disabled=message["df"].empty)
+            
+            dataViewModal = Modal(
+                    "Inspect Data", 
+                    key="viewdata-modal",
+                    
+                    # Optional
+                    padding=20,    # default value
+                    max_width=744  # default value,
+                )
+            if(col2.button('Inspect Data :mag:',key=generate_uniqObjectName('btInspect-Data'),disabled=message["df"].empty  )):
+                dataViewModal.open()
+                
+            if(dataViewModal.is_open()):
+                with dataViewModal.container():
+                    st.dataframe(message["df"])
+            col3.markdown("***Quick Data Overview:***")
+            col3.markdown(cache_describeSQLData(df_describe=message["df"].describe(), sql=message["sql"], prompt=message["prompt"]))
         elif message["type"] =='figure-code':
             col1, col2 = st.columns([3, 2], )
             col1.markdown('Here is a figure for the data:')
-            if st.session_state['plottingLib']=='Plotly':
-                col1.plotly_chart(message["figure"])
-            elif  st.session_state['plottingLib']=='Altair':
-                col1.altair_chart(message["figure"])
-            elif st.session_state['plottingLib']=='Bokeh':
-                col1.bokeh_chart(message["figure"])
+            if message['figtype']=='Plotly':
+                col1.plotly_chart(message["fig"],use_container_width=True)
+            elif   message['figtype']=='Altair':
+                col1.altair_chart(message["fig"],use_container_width=True)
+            elif  message['figtype']=='Bokeh':
+                col1.bokeh_chart(message["fig"],use_container_width=True)
             else:
                 st.text(message["content"])
             col2.markdown('Here is the code for the figure:')
             col2.code(message["code"], language="python", line_numbers=True )
         elif message["type"] =='figure':
-            st.plotly_chart(message["content"])
+            if message['figtype']=='Plotly':
+                col1.plotly_chart(message["fig"],use_container_width=True)
+            elif  message['figtype']=='Altair':
+                col1.altair_chart(message["fig"],use_container_width=True)
+            elif message['figtype']=='Bokeh':
+                col1.bokeh_chart(message["fig"],use_container_width=True)
+            else:
+                st.text(message["content"])
         elif  message["type"] =='error':
             st.error(message["content"])
         else:
@@ -278,7 +299,7 @@ for message in st.session_state.messages:
 if st.session_state.get('show_sessionstate',True):  
     st.sidebar.write(st.session_state)
 
-    
+
 if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHelp']), disabled= not st.session_state['enableUserTextInput'] ) :
 
     print('entering 1')
@@ -297,6 +318,7 @@ if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputH
         st.session_state.messages.append({"role": "user", "content": userResponse, "type":"markdown"})
         st.session_state['prompt'] =userResponse
         st.session_state['enableUserTextInput']=False
+        st.session_state['enablePlottingDataModelChange'] = False
         st.rerun()
     elif(st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None):
         st.session_state['enableUserTextInput']=False
@@ -325,21 +347,23 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
         # st.session_state['sql'] = st.session_state['tempSQL']
         st.session_state["df"] = vn.run_sql(sql=st.session_state['tempSQL'])
         if st.session_state.get("show_sql", True):
-            st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] , 'df':st.session_state["df"].head(5), 'nrows':'5',"type":"sql-dataframe"})
+            st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] , 'df':st.session_state['df'], 'prompt':st.session_state['prompt'], 'nrows':'5',"type":"sql-dataframe"})
         st.rerun()
 elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None and st.session_state['sqlInstructions'] is None and st.session_state['enableUserTextInput'] == False :
     print('entering 3') 
+    
     with st.chat_message("user"):
-        sqlRadioInput = st.radio(
+        st.session_state['sqlRadioInput'] = st.radio(
             "I would like to ...",
-            options=["Instruct Changes (SQL):speaking_head_in_silhouette:","Edit :pencil2:", "OK :white_check_mark:"],
+            options=["Instruct Changes (SQL):speaking_head_in_silhouette:","Edit :pencil2:", "OK :white_check_mark:","Restart with a New Question :wastebasket:"],
             index=None,
-            captions = ["Tell Data GENIE how the SQL query should be updated","Edit the SQL", "Use generated SQL query"],
-            horizontal = True
+            captions = ["Tell Data GENIE how the SQL query should be updated","Edit the SQL", "Use generated SQL query", "Clear current question and start over"],
+            horizontal = True,
+           # key='sqlRadioInput'
         )
-    st.session_state['textInputHelp'] =sqlRadioInput
-    if sqlRadioInput == "Edit :pencil2:":
-        st.warning("Please update the generated SQL code. Once you're done hit Shift + Enter to submit" )
+    st.session_state['textInputHelp'] =st.session_state['sqlRadioInput']
+    if st.session_state['sqlRadioInput'] == "Edit :pencil2:":
+        st.warning("Please update the generated SQL code. Once you're done hit Ctrl + Enter to submit" )
         
         sql_response = code_editor(st.session_state['tempSQL'], lang="sql")
         fixed_sql_query = sql_response["text"]
@@ -347,23 +371,32 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
         if fixed_sql_query != "":
             st.session_state.messages.append({"role": "user", "content": "I would like to edit the SQL :pencil2:" , "type":"markdown"  })
             # st.session_state.messages.append({"role": "user", "content": ":pencil: Edited SQL: ", "type":"markdown"})
-            st.session_state['sql'] = "--Edited SQL:\n"+ fixed_sql_query
-            st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
-            st.session_state.messages.append({"role": "user", "content":  st.session_state['sql'] , "type":"sql"})
-            st.rerun()
+            st.session_state['tempSQL'] = "--Edited SQL:\n"+ fixed_sql_query
+            df = vn.run_sql(sql=st.session_state['tempSQL'])
+            st.session_state.messages.append({"role": "user", "content":  st.session_state['tempSQL'] , "type":"sql"})
+            st.session_state.messages.append({"role": "assistant", 'content':"Result for your edited SQL query","type":"markdown"})
+            st.session_state.messages.append({"role": "assistant", 'df':df, 'nrows':'5',"type":"dataframe"})
+            st.session_state['sqlRadioInput']=None
+            # st.session_state.sqlRadioInput.index = None
+            # st.write(k)
+            # st.rerun()
         else:
             st.stop()
-    elif sqlRadioInput == "OK :white_check_mark:":
+    elif st.session_state['sqlRadioInput'] == "OK :white_check_mark:":
         st.session_state.messages.append({"role": "user", "content": "SQL looks good :white_check_mark:", "type":"markdown"})
         st.session_state['sql']=st.session_state['tempSQL']
         st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
         st.rerun() 
-    elif sqlRadioInput == "Instruct Changes (SQL):speaking_head_in_silhouette:":
+    elif st.session_state['sqlRadioInput'] == "Instruct Changes (SQL):speaking_head_in_silhouette:":
         print('entering Instruct Changes')   
         st.session_state['enableUserTextInput'] = True
         st.session_state["tempSQL"] = None
         st.session_state["df"] = None
         st.rerun()
+    elif st.session_state['sqlRadioInput'] == "Restart with a New Question :wastebasket:":
+        st.session_state.messages.append({"role": "user", "content": "Lets restart with a new question"  , "type":"markdown"})
+        st.session_state.messages.append({"role": "assistant", "content": "Got it, Im ready for your next question. Please go ahead and ask a new question...", 'type':'markdown'   })
+        resetPrompt()
     else:
         st.stop()
 
@@ -373,7 +406,7 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
     if st.session_state.get("show_table", True) and st.session_state.get("userUpdateCode") is None:
         if len(df) > 10:
             st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query (first 10 rows):"  , "type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", "df": df.head(10) ,"nrows": 10, "type":"dataframe" })
+            st.session_state.messages.append({"role": "assistant", "df": df ,"nrows": 10, "type":"dataframe" })
         elif len(df) == 0:
             st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"markdown"})
             st.session_state.messages.append({"role": "assistant", "df": df ,"nrows": '0', "type":"dataframe" })
@@ -385,20 +418,36 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
             #st.dataframe(df)
 
     if st.session_state['figureInstructions'] is None:
-        st.session_state["tempCode"] = vn.generate_plotly_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df=df,chart_instructions='', plottingLib=st.session_state['plottingLib'] )
+        st.session_state["tempCode"] = vn.generate_plot_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df_metadata=df.dtypes,df=df ,chart_instructions='', plottingLib=st.session_state['plottingLib'] )
     else:
-        st.session_state["tempCode"] = vn.edit_plotly_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df=st.session_state["df"],chart_instructions=st.session_state["figureInstructions"],chart_code=st.session_state["userUpdateCode"],plottingLib=st.session_state['plottingLib']  )
+        st.session_state["tempCode"] = vn.edit_plot_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df_metadata=df.dtypes,df=df,chart_instructions=st.session_state["figureInstructions"],chart_code=st.session_state["userUpdateCode"],plottingLib=st.session_state['plottingLib']  )
         st.session_state['figureInstructions'] = None
-
+    print(f'Plot code generated {st.session_state["tempCode"]}')
     if st.session_state.get("show_plotly_code", True):
-        st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
-        st.session_state.messages.append({"role": "assistant", "figure": st.session_state["fig"] ,'code':st.session_state["tempCode"], "type":"figure-code" })
+        if st.session_state['plottingLib'] == 'Plotly':
+            st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
+        elif st.session_state['plottingLib'] =='Altair':
+            st.session_state["fig"] = vn.get_altair_figure(altair_code=st.session_state["tempCode"] , df=st.session_state["df"])
+        elif st.session_state['plottingLib'] =='Bokeh':
+            st.session_state["fig"] = vn.get_bokeh_figure(bokeh_code=st.session_state["tempCode"] , df=st.session_state["df"])
+        else:
+            st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
+
+        st.session_state.messages.append({"role": "assistant", "fig": st.session_state["fig"] ,'code':st.session_state["tempCode"], 'figtype': st.session_state['plottingLib'], "type":"figure-code" })
         st.rerun()
     elif st.session_state.get("show_chart", True):
         if st.session_state["fig"] is not None:
-            st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
-            st.session_state.messages.append({"role": "assistant", "content": f"For your question: {st.session_state['prompt']} - we prepared this final figure:"  , "type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", "content": st.session_state["fig"]  , 'type':'figure' })
+            if st.session_state['plottingLib'] == 'Plotly':
+                st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
+            elif st.session_state['plottingLib'] =='Altair':
+                st.session_state["fig"] = vn.get_altair_figure(altair_code=st.session_state["tempCode"] , df=st.session_state["df"])
+            elif st.session_state['plottingLib'] =='Bokeh':
+                st.session_state["fig"] = vn.get_bokeh_figure(bokeh_code=st.session_state["tempCode"] , df=st.session_state["df"])
+            else:
+                st.session_state["fig"] = vn.get_plot_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
+
+            st.session_state.messages.append({"role": "assistant", "content": f"For your question: {st.session_state['prompt']} - I was able to generate this figure:"  , "type":"markdown"})
+            st.session_state.messages.append({"role": "assistant", "content": st.session_state["fig"]  , 'figtype':st.session_state['plottingLib'], 'type':'figure' })
         else:
             st.session_state.messages.append({"role": "assistant", "content":"I couldn't generate a chart" , 'type':'error' })
         st.rerun()
@@ -407,16 +456,16 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
     with st.chat_message("user"):
         plotyRadioInput = st.radio(
                 "I would like to ...",
-                options=["Instruct Changes (Figure):speaking_head_in_silhouette:","Edit Code Manually :pencil2:", "OK :white_check_mark:",'Instruct Changes (SQL) :rewind:'],
+                options=["Instruct Changes (Figure):speaking_head_in_silhouette:","Edit Code Manually :pencil2:", "OK :white_check_mark:",'Instruct Changes (SQL) :rewind:',"Restart with a New Question :wastebasket:"],
                 index=None,
-                captions = ["Tell Data GENIE how the figure should be updated","Edit the Plot code", "Use generated Plot code",'Go back a step and tell Data GENIE to modify the SQL query'],
+                captions = ["Tell Data GENIE how the figure should be updated","Edit the Plot code", "Use generated Plot code",'Go back a step and tell Data GENIE to modify the SQL query',"Clear current question and start over"],
                 horizontal = True
             )
     
     st.session_state['textInputHelp'] =plotyRadioInput
     if plotyRadioInput == "Edit Code Manually :pencil2:":
         
-        st.warning("Please fix the generated Python code. Once you're done hit Shift + Enter to submit")
+        st.warning("Please fix the generated Python code. Once you're done hit Ctrl + Enter to submit")
         python_code_response = code_editor(st.session_state["tempCode"], lang="python")
         fixed_python_code = python_code_response["text"]
 
@@ -451,6 +500,10 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
         st.session_state["sql"] =None
         st.session_state["code"]=None
         st.rerun()
+    elif plotyRadioInput == "Restart with a New Question :wastebasket:":
+        st.session_state.messages.append({"role": "user", "content": "Lets restart with a new question"  , "type":"markdown"})
+        st.session_state.messages.append({"role": "assistant", "content": "Got it, Im ready for your next question. Please go ahead and ask a new question...", 'type':'markdown'   })
+        resetPrompt()
     else:
         st.stop()
         

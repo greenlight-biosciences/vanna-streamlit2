@@ -3,3 +3,7 @@ streamlit
 streamlit_code_editor
 python-dotenv
 bokeh
+altair
+bokeh.models
+bokeh.io
+streamlit_modal 

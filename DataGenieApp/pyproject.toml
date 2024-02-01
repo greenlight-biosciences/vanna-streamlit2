@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "vanna-streamlit"
-version = "0.1.0"
+name = "DataGenie"
+version = "1.0.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
+authors = ["Matt Grobelny"]
 readme = "README.md"
-packages = [{include = "vanna_streamlit"}]
+packages = [{include = "DataGenieApp"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.9.7 || >3.9.7,<4.0"
@@ -17,7 +17,8 @@ streamlit-code-editor = "^0.1.10"
 bokeh = "^2.0.0"
 altair = "^4.0.0"
 snowflake-connector-python = "^3.6.0"
-
+ipython="^8.13.0"
+streamlit_modal="^0.1.1"
 [tool.poetry.group.dev.dependencies]
 black = "^23.9.1"
 

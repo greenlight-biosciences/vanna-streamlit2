@@ -28,17 +28,17 @@ vn.connect_to_snowflake(
 )
 
 
-def trainVN(input , type, question =None):
-    if type =='ddl':
-        vn.train(ddl=input)
-    elif type =='doc':
-        vn.train(documentation=input)
-    elif type =='sql':
-         # Check if question is provided
-        if question:
-            vn.train(sql=input, question=question)
-        else:
-            vn.train(sql=input)   
+# def trainVN(input , type, question =None):
+#     if type =='ddl':
+#         vn.train(ddl=input)
+#     elif type =='doc':
+#         vn.train(documentation=input)
+#     elif type =='sql':
+#          # Check if question is provided
+#         if question:
+#             vn.train(sql=input, question=question)
+#         else:
+#             vn.train(sql=input)   
 
 # def resetPrompt():
 #     st.session_state['prompt'] = None
@@ -90,3 +90,16 @@ def trainDDL(ddl):
     if (ddl):
         trainVN(input =ddl, type ='ddl')
         st.session_state.ddl_input = ""
+
+
+def trainVN(self, input , type, question =None):
+    if type =='ddl':
+        self.train(ddl=input)
+    elif type =='doc':
+        self.train(documentation=input)
+    elif type =='sql':
+         # Check if question is provided
+        if question:
+            self.train(sql=input, question=question)
+        else:
+            self.train(sql=input) 
