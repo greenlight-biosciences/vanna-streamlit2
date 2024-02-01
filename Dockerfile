@@ -2,13 +2,24 @@ FROM python:3.9
 
 RUN pip install poetry==1.4.2
 
-#WORKDIR /
+# Poetry's configuration:
+# ENV  POETRY_NO_INTERACTION=1 \
+#   POETRY_VIRTUALENVS_CREATE=false \
+#   POETRY_CACHE_DIR='/var/cache/pypoetry' \
+#   POETRY_HOME='/usr/local'
 
-# COPY /DataGenieApp/pyproject.toml /DataGenieApp/poetry.lock ./
-COPY DataGenieApp ./DataGenieApp
-WORKDIR /DataGenieApp
-RUN touch README.md
+WORKDIR /usr/src/app
 
-RUN poetry install --without dev
+COPY /pyproject.toml /poetry.lock /README.md ./
+COPY DataGenie ./DataGenie
 
-ENTRYPOINT ["poetry", "run", "streamlit","run", "dataGenieApp.py"]
+# Install project dependencies
+RUN poetry config virtualenvs.create false
+RUN poetry install --no-dev
+
+WORKDIR /usr/src/app/DataGenie
+EXPOSE 8501
+
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
+
+ENTRYPOINT ["poetry", "run", "streamlit","run", "dataGenieApp.py" , "--server.port=8501", "--server.address=0.0.0.0"]

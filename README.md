@@ -28,18 +28,52 @@ poetry install --with dev
 If you're running the app locally, please add a `.env` file at the root of the project with your crendentials:
 
 ```bash
-AZUREOPENAIURL='https://XXXXXX.openai.azure.com/'
-AZUREOPENAIENGINE='gpt-4'
-AZUREOPENAIKEY=XXXXX
+AZURE_OPENAI_ENDPOINT=https://XXXXX.openai.azure.com #No quotes 
+AZUREOPENAIENGINE=gpt-XXX #No quotes 
+AZUREOPENAIKEY=XXXXXX #No quotes 
+DATABASETYPE=Snowflake #No quotes 
+USER=XXXXXX #No quotes 
+PASS=XXXXX #No quotes if pass requires quotes due to special char change out char
+ACCOUNT=snowflake.account.name #No quotes 
+WAREHOUSE=XXX #No quotes 
+DATABASE=XXXX #No quotes 
+SCHEMA=XXX #No quotes 
+ROLE=XXX #No quotes 
+APPTITLE=YOURAPPNAMEHERE #No quotes 
+GETHELPURL=YOURHELPDOCSURLHERE #No quotes 
+SUBMITTICKETURL=YOURTICKETINGPORTALHERE #No quotes 
 ```
 
 To create a Vanna API key, please refer to this [link](https://vanna.ai/).
 
-Then run the app with this command:
+## Running Locally
+Run the locally app with this command:
 
 ```bash
 poetry run streamlit run app.py
 ```
+
+## Running App with Docker
+From the top directory:
+
+1. First build your image 
+```bash
+docker build -t datagenie .
+```
+
+2. Run container
+```bash
+docker run --env-file .env -p 8501:8501 datagenie
+```
+
+## App URL
+App will be accessible at: 
+[http://localhost:8501/](http://localhost:8501/)
+
+### TroubleShooting
+> **_NOTE:_** IF snowflake access is failing double check that you did not quote any of the ENVs in your env file. Quoted envs passed in through docker run end up with additional quotes.
+
+
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
