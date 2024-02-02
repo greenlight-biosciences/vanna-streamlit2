@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from streamlit_modal import Modal
 
 
-load_dotenv(".env")
+load_dotenv("../.env")
 
 
 vn= MyVanna(
@@ -24,14 +24,14 @@ vn= MyVanna(
 })
 # vn.connect_to_sqlite('biotech_database.db') 
 
-vn.connect_to_snowflake(
-    account=os.environ.get('ACCOUNT'),
-    username=os.environ.get('USER'),
-    password=os.environ.get('PASS'),
-    database=os.environ.get('DATABASE'),
-    role=os.environ.get('ROLE'),
-    schema=os.environ.get('SCHEMA')
-)
+# vn.connect_to_snowflake(
+#     account=os.environ.get('ACCOUNT'),
+#     username=os.environ.get('USER'),
+#     password=os.environ.get('PASS'),
+#     database=os.environ.get('DATABASE'),
+#     role=os.environ.get('ROLE'),
+#     schema=os.environ.get('SCHEMA')
+# )
 
 
 
@@ -88,21 +88,43 @@ def trainQuestionAnswer(sqlQ=None,sqlA=None):
     print('running trainQuestionAnswer traning')
 
     if(sqlA and sqlQ):
-        vn.trainVN(input =sqlQ , question=sqlA, type ='sql')
-        st.session_state.sqlQ_input = ""
-        st.session_state.sqlA_input = ""
+        returnVal= vn.trainVN(input =sqlQ , question=sqlA, type ='sql')
+        if returnVal:
+            st.session_state.sqlQ_input = ""
+            st.session_state.sqlA_input = ""
+            st.toast('Added Question & SQL Answer to Knowledgebase')
+        else:
+            st.toast('Failed to add Question & SQL Answer to Knowledgebase')
+    else:
+        st.toast('No Question & SQL Answer entered!')
+
+
+
 def trainDoc(doc):
     print('running doc traning')
     if (doc):
-        vn.trainVN(input =doc, type ='doc')
-        st.session_state.doc_input = ""
+        returnVal = vn.trainVN(input =doc, type ='doc')
+        if returnVal:
+            st.session_state.doc_input = ""
+            st.toast('Added Documenation to Knowledgebase')
+        else:
+            st.toast('Failed to add Documenation to Knowledgebase')
+    else:
+        st.toast('No Documenation entered!')
+
 
 def trainDDL(ddl):
     print('running ddl traning')
 
     if (ddl):
-        vn.trainVN(input =ddl, type ='ddl')
-        st.session_state.ddl_input = ""
+        returnVal = vn.trainVN(input =ddl, type ='ddl')
+        if returnVal:
+            st.session_state.ddl_input = ""
+            st.toast('Added DDL to Knowledgebase')
+        else:
+            st.toast('Failed to add DDL to Knowledgebase')
+    else:
+        st.toast('No DDL entered!')
 
 # def runTrainingPlan(self, type):
 #         if type =='Snowflake':
@@ -190,13 +212,16 @@ trainingData= vn.get_training_data()
 trainingData.insert(0, "Select", False)
 
 selectedForDeletion = tab2.data_editor(trainingData, hide_index=True, column_config={"Select": st.column_config.CheckboxColumn(required=True), "id":st.column_config.Column(width='small')},)
-
-st.session_state['ddl']=tab2.text_area('Enter DDL information', value='', height=None, max_chars=None, key='ddl_input',disabled=st.session_state['enableTraining'] , on_change=trainDDL, args=(st.session_state['ddl'], ))
-st.session_state['doc']=tab2.text_area('Enter Documentation information:', value='', height=None, max_chars=None, key='doc_input',disabled=st.session_state['enableTraining'], on_change=trainDoc, args=(st.session_state['doc'], ))
-st.session_state['sqlQ']= tab2.text_area('Enter Question:', value='', height=None, max_chars=None, key='sqlQ_input',disabled=st.session_state['enableTraining'], on_change=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
-st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=None, max_chars=None, key='sqlA_input',disabled=st.session_state['enableTraining'], on_change=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
-
-
+st.session_state['ddl']=tab2.text_area('Enter DDL information', value='', height=None, max_chars=None, key='ddl_input',disabled=st.session_state['enableTraining'] )
+tab2.button('Submit DDL',key='submit_DDL', on_click=trainDDL, args=(st.session_state['ddl'], ))
+tab2.markdown("***")
+st.session_state['doc']=tab2.text_area('Enter Documentation information:', value='', height=None, max_chars=None, key='doc_input',disabled=st.session_state['enableTraining'])
+tab2.button('Submit Docs',key='submit_DOC', on_click=trainDoc, args=(st.session_state['doc'], ))
+tab2.markdown("***")
+st.session_state['sqlQ']= tab2.text_area('Enter Question:', value='', height=None, max_chars=None, key='sqlQ_input',disabled=st.session_state['enableTraining'])
+st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=None, max_chars=None, key='sqlA_input',disabled=st.session_state['enableTraining'])
+tab2.button('Submit Q&A',key='submit_Q&A', on_click=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
+tab2.markdown("***")
 
 st.sidebar.title("Output Settings")
 st.sidebar.checkbox("Show SQL", value=True, key="show_sql")

@@ -475,7 +475,19 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         #     fig.border_fill_color = "#3E3E3E"
 
         return fig
-    
+
+
+    def trainVN(self, input , type, question =None):
+        if type =='ddl':
+            return self.train(ddl=input)
+        elif type =='doc':
+            return self.train(documentation=input)
+        elif type =='sql':
+            # Check if question is provided
+            if question:
+               return  self.train(sql=input, question=question)
+            else:
+                return self.train(sql=input) 
     # def get_similar_question_sql(self, question: str, tag=None, **kwargs) -> list:
     #     query_params = {
     #         "query_texts": [question],
