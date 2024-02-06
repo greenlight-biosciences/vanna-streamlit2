@@ -2,7 +2,7 @@
 from typing import Union
 from vanna import get_models, set_model
 from vanna.openai.openai_chat import OpenAI_Chat
-from vanna.chromadb.chromadb_vector import ChromaDB_VectorStore
+from chromasdb_vector import ChromaDB_VectorStore
 import snowflake.connector
 import pandas as pd
 from vanna.exceptions import DependencyError, ImproperlyConfigured, ValidationError
@@ -257,6 +257,8 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
     
     def runTrainingPlanSnowflake(self):
         plan = self.get_training_plan_snowflake()
+        self.log("Running Training Plan")
+        self.log(plan)
         self.train(plan=plan)
 
     def get_sql_prompt(

@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from streamlit_modal import Modal
 
 
-load_dotenv("../.env")
+# load_dotenv(".env")
 
 
 vn= MyVanna(
@@ -21,17 +21,18 @@ vn= MyVanna(
 	    #'engine': "gpt-4",
         'model': "gpt-35-turbo",
 	    'api_key': os.environ.get("AZUREOPENAIKEY"),
+        'authtype': os.environ.get("CHROMASDBAUTHTYPE"),
 })
 # vn.connect_to_sqlite('biotech_database.db') 
 
-# vn.connect_to_snowflake(
-#     account=os.environ.get('ACCOUNT'),
-#     username=os.environ.get('USER'),
-#     password=os.environ.get('PASS'),
-#     database=os.environ.get('DATABASE'),
-#     role=os.environ.get('ROLE'),
-#     schema=os.environ.get('SCHEMA')
-# )
+vn.connect_to_snowflake(
+    account=os.environ.get('ACCOUNT'),
+    username=os.environ.get('SNOWFLAKE_USER'),
+    password=os.environ.get('SNOWFLAKE_PASS'),
+    database=os.environ.get('DATABASE'),
+    role=os.environ.get('ROLE'),
+    schema=os.environ.get('SCHEMA')
+)
 
 
 
