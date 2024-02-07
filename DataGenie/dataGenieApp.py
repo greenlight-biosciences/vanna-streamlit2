@@ -25,15 +25,36 @@ vn= MyVanna(
 })
 # vn.connect_to_sqlite('biotech_database.db') 
 
-vn.connect_to_snowflake(
-    account=os.environ.get('ACCOUNT'),
-    username=os.environ.get('SNOWFLAKE_USER'),
-    password=os.environ.get('SNOWFLAKE_PASS'),
-    database=os.environ.get('DATABASE'),
-    role=os.environ.get('ROLE'),
-    schema=os.environ.get('SCHEMA')
-)
 
+
+# Initialize app state variables
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "content": "How can I help?" , "type":"markdown"}]
+    st.session_state.prompt = None
+    st.session_state.sql =None
+    st.session_state.code =None
+    st.session_state.df =None
+    st.session_state.fig =None
+    st.session_state.tempSQL =None
+    st.session_state.tempCode =None
+    st.session_state.enableUserTextInput =True
+    st.session_state.saveQnAPair =None
+    st.session_state.ddl =None
+    st.session_state.doc =None
+    st.session_state.sqlQ =None
+    st.session_state.sqlA =None
+    st.session_state.enableTraining=False
+    st.session_state.figureInstructions=None
+    st.session_state.userUpdateCode=None
+    st.session_state.plottingLib='Plotly'
+    st.session_state.vnModel='PH General v1'
+    st.session_state.sqlInstructions =None
+    st.session_state.userUpdateSQL =None
+    st.session_state.textInputHelp =None
+    st.session_state.uniqWidgetCounter =0
+    st.session_state.sqlRadioInput = None
+    st.session_state.enablePlottingDataModelChange = True
+    userResponse = None
 
 
 def resetPrompt():
@@ -56,7 +77,6 @@ def resetPrompt():
     st.session_state['userUpdateSQL'] =None
     st.session_state['textInputHelp'] =None
     st.session_state['enablePlottingDataModelChange'] =True
-
     userResponse = None
     st.rerun()
 
@@ -89,11 +109,11 @@ def trainQuestionAnswer(sqlQ=None,sqlA=None):
     print('running trainQuestionAnswer traning')
 
     if(sqlA and sqlQ):
-        returnVal= vn.trainVN(input =sqlQ , question=sqlA, type ='sql')
+        returnVal= vn.trainVN(input = sqlA, question=sqlQ, type ='sql' , schema= st.session_state['vnModel'] )
         if returnVal:
             st.session_state.sqlQ_input = ""
             st.session_state.sqlA_input = ""
-            st.toast('Added Question & SQL Answer to Knowledgebase')
+            st.toast(f'Added Question & SQL Answer to Knowledgebase for Schema:{st.session_state["vnModel"]}')
         else:
             st.toast('Failed to add Question & SQL Answer to Knowledgebase')
     else:
@@ -104,10 +124,10 @@ def trainQuestionAnswer(sqlQ=None,sqlA=None):
 def trainDoc(doc):
     print('running doc traning')
     if (doc):
-        returnVal = vn.trainVN(input =doc, type ='doc')
+        returnVal = vn.trainVN(input =doc, type ='doc', schema= st.session_state['vnModel'])
         if returnVal:
             st.session_state.doc_input = ""
-            st.toast('Added Documenation to Knowledgebase')
+            st.toast(f'Added Documenation to Knowledgebase for Schema:{st.session_state["vnModel"]}')
         else:
             st.toast('Failed to add Documenation to Knowledgebase')
     else:
@@ -118,10 +138,10 @@ def trainDDL(ddl):
     print('running ddl traning')
 
     if (ddl):
-        returnVal = vn.trainVN(input =ddl, type ='ddl')
+        returnVal = vn.trainVN(input =ddl, type ='ddl', schema= st.session_state['vnModel'])
         if returnVal:
             st.session_state.ddl_input = ""
-            st.toast('Added DDL to Knowledgebase')
+            st.toast(f'Added DDL to Knowledgebase for Schema:{st.session_state["vnModel"]}')
         else:
             st.toast('Failed to add DDL to Knowledgebase')
     else:
@@ -141,36 +161,6 @@ menu_items ={"Get help":os.environ.get("GETHELPURL"), "Report a Bug":os.environ.
 st.set_page_config(layout="wide", page_title =appTitle, menu_items =menu_items )
 st.title(appTitle)
 tab1,tab2 = st.tabs(['Chatbot',"🗃 SQL KnowledgeBase"])
-
-
-# Initialize app state variables
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "How can I help?" , "type":"markdown"}]
-    st.session_state.prompt = None
-    st.session_state.sql =None
-    st.session_state.code =None
-    st.session_state.df =None
-    st.session_state.fig =None
-    st.session_state.tempSQL =None
-    st.session_state.tempCode =None
-    st.session_state.enableUserTextInput =True
-    st.session_state.saveQnAPair =None
-    st.session_state.ddl =None
-    st.session_state.doc =None
-    st.session_state.sqlQ =None
-    st.session_state.sqlA =None
-    st.session_state.enableTraining=False
-    st.session_state.figureInstructions=None
-    st.session_state.userUpdateCode=None
-    st.session_state.plottingLib='Plotly'
-    st.session_state.vnModel='PH General v1'
-    st.session_state.sqlInstructions =None
-    st.session_state.userUpdateSQL =None
-    st.session_state.textInputHelp =None
-    st.session_state.uniqWidgetCounter =0
-    st.session_state.sqlRadioInput = None
-    st.session_state.enablePlottingDataModelChange = True
-    userResponse = None
 
 def deleteTraining():
     selected_rows = selectedForDeletion[selectedForDeletion['Select']]
@@ -204,12 +194,23 @@ def generate_uniqObjectName(object:str='obj'):
     # Use the formatted time string in the filename
     return f'{current_time}-{object}-{st.session_state["uniqWidgetCounter"]}'
 
+st.sidebar.title("Output Settings")
+st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
+st.sidebar.checkbox("Show Table", value=True, key="show_table")
+st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
+st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
+st.sidebar.checkbox("Show Follow-up Questions", value=False, key="show_followup")
+st.sidebar.checkbox("Show Session State", value=False, key="show_sessionstate")
+st.sidebar.button("Reset/Clear Conversation", on_click=reRunClearApp, use_container_width=True)
+st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which plotting library chat app uses for generating figures (Note:Changing the plotting library is only allowed at the start of a new conversation)')
+st.session_state['vnModel']=st.sidebar.selectbox('Data Mart',options=os.environ.get('ALLOWEDSCHEMAS','MISSING_ALLOWEDSCHEMAS_ENV').split(','),index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
+
 
 tab2.subheader("Training Data")
 tab2.button('Delete Training',key='deleteTraining', on_click=deleteTraining)
 tab2.button('Run Automated DB schema Training',key='autoTraining', on_click=vn.runTrainingPlanSnowflake )
 
-trainingData= vn.get_training_data()
+trainingData= vn.get_training_data(schema=st.session_state['vnModel'])
 trainingData.insert(0, "Select", False)
 
 selectedForDeletion = tab2.data_editor(trainingData, hide_index=True, column_config={"Select": st.column_config.CheckboxColumn(required=True), "id":st.column_config.Column(width='small')},)
@@ -224,16 +225,15 @@ st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=N
 tab2.button('Submit Q&A',key='submit_Q&A', on_click=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
 tab2.markdown("***")
 
-st.sidebar.title("Output Settings")
-st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
-st.sidebar.checkbox("Show Table", value=True, key="show_table")
-st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
-st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
-st.sidebar.checkbox("Show Follow-up Questions", value=False, key="show_followup")
-st.sidebar.checkbox("Show Session State", value=False, key="show_sessionstate")
-st.sidebar.button("Reset/Clear Conversation", on_click=reRunClearApp, use_container_width=True)
-st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which plotting library chat app uses for generating figures (Note:Changing the plotting library is only allowed at the start of a new conversation)')
-st.session_state['vnModel']=st.sidebar.selectbox('Data Mart',options=['PH General v1'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
+
+vn.connect_to_snowflake(
+    account=os.environ.get('ACCOUNT'),
+    username=os.environ.get('SNOWFLAKE_USER'),
+    password=os.environ.get('SNOWFLAKE_PASS'),
+    database=os.environ.get('DATABASE'),
+    role=os.environ.get('ROLE'),
+    schema=st.session_state['vnModel']
+)
 
 @st.cache_data
 def cache_describeSQLData(prompt: str = None, sql:str =None, additionalInstructions:str =None, df_describe:str =None):
@@ -241,7 +241,7 @@ def cache_describeSQLData(prompt: str = None, sql:str =None, additionalInstructi
 
 
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    with tab1.chat_message(message["role"]):
         if message["type"] =='markdown':
             st.markdown(message["content"])
         elif message["type"] =='code':
@@ -325,7 +325,6 @@ for message in st.session_state.messages:
 if st.session_state.get('show_sessionstate',True):  
     st.sidebar.write(st.session_state)
 
-
 if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHelp']), disabled= not st.session_state['enableUserTextInput'] ) :
 
     print('entering 1')
@@ -360,7 +359,7 @@ if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputH
 elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None and st.session_state['enableUserTextInput']==False:   
     print('entering 2') 
 
-    st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'])
+    st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'], schema=st.session_state['vnModel'])
 
     if is_select_statement(st.session_state['tempSQL']) == False:
         #responses is not a select statement let user ask again
@@ -385,7 +384,7 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
             index=None,
             captions = ["Tell Data GENIE how the SQL query should be updated","Edit the SQL", "Use generated SQL query", "Clear current question and start over"],
             horizontal = True,
-           # key='sqlRadioInput'
+        # key='sqlRadioInput'
         )
     st.session_state['textInputHelp'] =st.session_state['sqlRadioInput']
     if st.session_state['sqlRadioInput'] == "Edit :pencil2:":
@@ -556,7 +555,7 @@ elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is 
 
     if plotyRadioInput == "Yes :floppy_disk:":
         st.session_state.messages.append({"role": "user", "content": "Yes, Save the question and SQL answer-pair :floppy_disk:", 'type':"markdown" })
-        vn.add_question_sql(st.session_state["prompt"],st.session_state["sql"])
+        vn.add_question_sql(question = st.session_state["prompt"], sql=st.session_state["sql"],schema= st.session_state["vnModel"])
         st.session_state.messages.append({"role": "assistant", "content": "Done!"  , "type":"markdown"})
         st.session_state["saveQnAPair"] = True
         st.rerun()

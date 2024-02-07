@@ -26,7 +26,7 @@ class ChromaDB_VectorStore(VannaBase):
                     path=path, settings=Settings(anonymized_telemetry=False)
                 )
             elif config.get("authtype") == 'TOKEN':
-                print(os.environ.get('CHROMA_SERVER_AUTH_CREDENTIALS'))
+                
                 self.embedding_function = config.get("embedding_function", default_ef)
                 self.chroma_client = chromadb.HttpClient( host=os.environ.get('CHROMA_SERVER_HOST'),
                                       port=os.environ.get('CHROMA_SERVER_PORT'), tenant=DEFAULT_TENANT, database=DEFAULT_DATABASE,
@@ -57,42 +57,53 @@ class ChromaDB_VectorStore(VannaBase):
             return embedding[0]
         return embedding
 
-    def add_question_sql(self, question: str, sql: str, **kwargs) -> str:
+    def add_question_sql(self, question: str, sql: str, schema:str =None, **kwargs) -> str:
         question_sql_json = json.dumps(
             {
                 "question": question,
                 "sql": sql,
+                "Active": True,  # Adding the Active field with a value of True
+                "SchemaName": schema if schema is not None else "PH General v1",  # Adding the SchemaName field
             }
         )
         id = str(uuid.uuid4()) + "-sql"
         self.sql_collection.add(
             documents=question_sql_json,
             embeddings=self.generate_embedding(question_sql_json),
+            metadatas = [{"Active":True, "SchemaName": schema}],
             ids=id,
         )
 
         return id
 
-    def add_ddl(self, ddl: str, **kwargs) -> str:
+    def add_ddl(self, ddl: str,schema:str =None, **kwargs) -> str:
         id = str(uuid.uuid4()) + "-ddl"
+
         self.ddl_collection.add(
             documents=ddl,
             embeddings=self.generate_embedding(ddl),
+            metadatas = [{"Active":True, "SchemaName": schema}],
             ids=id,
         )
         return id
 
-    def add_documentation(self, documentation: str, **kwargs) -> str:
+    def add_documentation(self, documentation: str,schema:str =None, **kwargs) -> str:
         id = str(uuid.uuid4()) + "-doc"
         self.documentation_collection.add(
             documents=documentation,
             embeddings=self.generate_embedding(documentation),
+            metadatas = [{"Active":True, "SchemaName": schema}],
             ids=id,
         )
         return id
 
-    def get_training_data(self, **kwargs) -> pd.DataFrame:
-        sql_data = self.sql_collection.get()
+    def get_training_data(self,schema:str =None, **kwargs) -> pd.DataFrame:
+        sql_data = self.sql_collection.get(where= {
+                        "$and": [
+                            {"Active": True},
+                            {"SchemaName": schema}
+                        ]
+                    })
 
         df = pd.DataFrame()
 
@@ -114,7 +125,12 @@ class ChromaDB_VectorStore(VannaBase):
 
             df = pd.concat([df, df_sql])
 
-        ddl_data = self.ddl_collection.get()
+        ddl_data = self.ddl_collection.get(where= {
+                        "$and": [
+                            {"Active": True},
+                            {"SchemaName": schema}
+                        ]
+                    })
 
         if ddl_data is not None:
             # Extract the documents and ids
@@ -134,7 +150,12 @@ class ChromaDB_VectorStore(VannaBase):
 
             df = pd.concat([df, df_ddl])
 
-        doc_data = self.documentation_collection.get()
+        doc_data = self.documentation_collection.get(where= {
+                        "$and": [
+                            {"Active": True},
+                            {"SchemaName": schema}
+                        ]
+                    })
 
         if doc_data is not None:
             # Extract the documents and ids
@@ -225,23 +246,42 @@ class ChromaDB_VectorStore(VannaBase):
 
             return documents
 
-    def get_similar_question_sql(self, question: str, **kwargs) -> list:
+    def get_similar_question_sql(self, question: str,schema:str =None, **kwargs) -> list:
         return ChromaDB_VectorStore._extract_documents(
             self.sql_collection.query(
                 query_texts=[question],
+                where= {
+                        "$and": [
+                            {"Active": True},
+                            {"SchemaName": schema}
+                        ]
+                    }
             )
         )
 
-    def get_related_ddl(self, question: str, **kwargs) -> list:
+    def get_related_ddl(self, question: str,schema:str =None, **kwargs) -> list:
         return ChromaDB_VectorStore._extract_documents(
             self.ddl_collection.query(
                 query_texts=[question],
+                where= {
+                        "$and": [
+                            {"Active": True},
+                            {"SchemaName": schema}
+                        ]
+                    }
             )
         )
 
-    def get_related_documentation(self, question: str, **kwargs) -> list:
+    def get_related_documentation(self, question: str,schema:str =None, **kwargs) -> list:
+
         return ChromaDB_VectorStore._extract_documents(
             self.documentation_collection.query(
                 query_texts=[question],
+                where= {
+                        "$and": [
+                            {"Active": True},
+                            {"SchemaName": schema}
+                        ]
+                    }
             )
         )

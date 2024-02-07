@@ -8,7 +8,7 @@ packages = [{include = "DataGenie"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.9.7 || >3.9.7,<4.0"
-streamlit = "^1.26.0"
+streamlit = "^1.31.0"
 python-dotenv = "^1.0.0"
 kaleido = "0.2.1"
 vanna = {extras = ["chromadb","openai"], version = "^0.0.30"}

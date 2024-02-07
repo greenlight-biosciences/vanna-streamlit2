@@ -13,6 +13,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import altair as alt
 from bokeh.plotting import figure
+from vanna.__init__ import TrainingPlan, TrainingPlanItem
 
 class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
     def __init__(self, config=None):
@@ -342,10 +343,10 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         
         return llm_response
     
-    def generate_sql(self, question: str,questionConversationHistory:list, **kwargs) -> str:
-        question_sql_list = self.get_similar_question_sql(question, **kwargs)
-        ddl_list = self.get_related_ddl(question, **kwargs)
-        doc_list = self.get_related_documentation(question, **kwargs)
+    def generate_sql(self, question: str,questionConversationHistory:list, schema:str=None, **kwargs) -> str:
+        question_sql_list = self.get_similar_question_sql(question, schema=schema, **kwargs)
+        ddl_list = self.get_related_ddl(question,schema=schema, **kwargs)
+        doc_list = self.get_related_documentation(question,schema=schema, **kwargs)
         prompt = self.get_sql_prompt(
             question=question,
             question_sql_list=question_sql_list,
@@ -478,18 +479,73 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         return fig
 
+    def train(
+        self,
+        question: str = None,
+        sql: str = None,
+        ddl: str = None,
+        documentation: str = None,
+        plan: TrainingPlan = None,
+        schema:str = None,
+    ) -> str:
+        """
+        **Example:**
+        ```python
+        vn.train()
+        ```
 
-    def trainVN(self, input , type, question =None):
+        Train Vanna.AI on a question and its corresponding SQL query.
+        If you call it with no arguments, it will check if you connected to a database and it will attempt to train on the metadata of that database.
+        If you call it with the sql argument, it's equivalent to [`add_sql()`][vanna.add_sql].
+        If you call it with the ddl argument, it's equivalent to [`add_ddl()`][vanna.add_ddl].
+        If you call it with the documentation argument, it's equivalent to [`add_documentation()`][vanna.add_documentation].
+        Additionally, you can pass a [`TrainingPlan`][vanna.TrainingPlan] object. Get a training plan with [`vn.get_training_plan_experimental()`][vanna.get_training_plan_experimental].
+
+        Args:
+            question (str): The question to train on.
+            sql (str): The SQL query to train on.
+            ddl (str):  The DDL statement.
+            documentation (str): The documentation to train on.
+            plan (TrainingPlan): The training plan to train on.
+        """
+
+        if question and not sql:
+            raise ValidationError(f"Please also provide a SQL query")
+
+        if documentation:
+            print("Adding documentation....")
+            return self.add_documentation(documentation,schema=schema)
+
+        if sql:
+            if question is None:
+                question = self.generate_question(sql)
+                print("Question generated with sql:", question, "\nAdding SQL...")
+            return self.add_question_sql(question=question, sql=sql,schema=schema)
+
+        if ddl:
+            print("Adding ddl:", ddl)
+            return self.add_ddl(ddl,schema=schema)
+
+        if plan:
+            for item in plan._plan:
+                if item.item_type == TrainingPlanItem.ITEM_TYPE_DDL:
+                    self.add_ddl(item.item_value)
+                elif item.item_type == TrainingPlanItem.ITEM_TYPE_IS:
+                    self.add_documentation(item.item_value)
+                elif item.item_type == TrainingPlanItem.ITEM_TYPE_SQL:
+                    self.add_question_sql(question=item.item_name, sql=item.item_value)
+                    
+    def trainVN(self, input , type, question =None,schema:str=None):
         if type =='ddl':
-            return self.train(ddl=input)
+            return self.train(ddl=input,schema=schema)
         elif type =='doc':
-            return self.train(documentation=input)
+            return self.train(documentation=input,schema=schema)
         elif type =='sql':
             # Check if question is provided
             if question:
-               return  self.train(sql=input, question=question)
+               return  self.train(sql=input, question=question,schema=schema)
             else:
-                return self.train(sql=input) 
+                return self.train(sql=input,schema=schema) 
     # def get_similar_question_sql(self, question: str, tag=None, **kwargs) -> list:
     #     query_params = {
     #         "query_texts": [question],
