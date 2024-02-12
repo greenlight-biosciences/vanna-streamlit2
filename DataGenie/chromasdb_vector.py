@@ -31,7 +31,8 @@ class ChromaDB_VectorStore(VannaBase):
                 self.chroma_client = chromadb.HttpClient( host=os.environ.get('CHROMA_SERVER_HOST'),
                                       port=os.environ.get('CHROMA_SERVER_PORT'), tenant=DEFAULT_TENANT, database=DEFAULT_DATABASE,
                                         settings=Settings(chroma_client_auth_provider= "token",
-                                        chroma_client_auth_credentials=os.environ.get('CHROMA_SERVER_AUTH_CREDENTIALS')))
+                                        chroma_client_auth_credentials=os.environ.get('CHROMA_SERVER_AUTH_CREDENTIALS'),
+                                        anonymized_telemetry=False))
                                       
                                     #   )
             else:
