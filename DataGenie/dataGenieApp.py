@@ -18,10 +18,11 @@ vn= MyVanna(
         'api_type': 'azure',
         'api_base': os.environ.get("AZURE_OPENAI_ENDPOINT"),
 	    'api_version': '2023-05-15',
-	    #'engine': "gpt-4",
-        'model': "gpt-35-turbo",
+	    #'engine': os.environ.get("AZUREOPENAIENGINE"),
+        'model': os.environ.get("AZUREOPENAIENGINE"),
 	    'api_key': os.environ.get("AZUREOPENAIKEY"),
         'authtype': os.environ.get("CHROMASDBAUTHTYPE"),
+        'path':os.environ.get("FILE_SHARE_PATH","."),
 })
 # vn.connect_to_sqlite('biotech_database.db') 
 
@@ -47,7 +48,7 @@ if "messages" not in st.session_state:
     st.session_state.figureInstructions=None
     st.session_state.userUpdateCode=None
     st.session_state.plottingLib='Plotly'
-    st.session_state.vnModel='PH General v1'
+    st.session_state.vnModel='PHGENERAL'
     st.session_state.sqlInstructions =None
     st.session_state.userUpdateSQL =None
     st.session_state.textInputHelp =None
@@ -106,7 +107,7 @@ def reRunClearApp():
     userResponse = None
 
 def trainQuestionAnswer(sqlQ=None,sqlA=None):
-    print('running trainQuestionAnswer traning')
+    vn.logInfo('running trainQuestionAnswer traning')
 
     if(sqlA and sqlQ):
         returnVal= vn.trainVN(input = sqlA, question=sqlQ, type ='sql' , schema= st.session_state['vnModel'] )
@@ -122,7 +123,7 @@ def trainQuestionAnswer(sqlQ=None,sqlA=None):
 
 
 def trainDoc(doc):
-    print('running doc traning')
+    vn.logInfo('running doc traning')
     if (doc):
         returnVal = vn.trainVN(input =doc, type ='doc', schema= st.session_state['vnModel'])
         if returnVal:
@@ -135,7 +136,7 @@ def trainDoc(doc):
 
 
 def trainDDL(ddl):
-    print('running ddl traning')
+    vn.logInfo('running ddl traning')
 
     if (ddl):
         returnVal = vn.trainVN(input =ddl, type ='ddl', schema= st.session_state['vnModel'])
@@ -147,14 +148,8 @@ def trainDDL(ddl):
     else:
         st.toast('No DDL entered!')
 
-# def runTrainingPlan(self, type):
-#         if type =='Snowflake':
-#             self.get_training_plan_generic()
-#         else:
-#             self.get_training_plan_generic()
-
-# from init_app_vars import *
-# from typing import Union
+def runAutomatedTrainingPlan(schema:str=None, database:str='PH_DATALAKE_DEV'):
+    vn.runTrainingPlanSnowflake(schema=schema, database=database)
 
 appTitle = os.environ.get("APPTITLE")
 menu_items ={"Get help":os.environ.get("GETHELPURL"), "Report a Bug":os.environ.get("SUBMITTICKETURL") }
@@ -171,7 +166,7 @@ def deleteTraining():
         try:
             vn.remove_training_data(id_value)
         except Exception as e:
-            print(f"Error removing training data for id {id_value}: {e}")
+            vn.logError(f"Error removing training data for id {id_value}: {e}")
 
 @st.cache_data 
 def convert_df(df):
@@ -194,6 +189,27 @@ def generate_uniqObjectName(object:str='obj'):
     # Use the formatted time string in the filename
     return f'{current_time}-{object}-{st.session_state["uniqWidgetCounter"]}'
 
+# @st.cache_resource
+# def runSnowflakeConn(model:str=st.session_state['vnModel']):
+#     vn.connect_to_snowflake(
+#         account=os.environ.get('ACCOUNT'),
+#         username=os.environ.get('SNOWFLAKE_USER'),
+#         password=os.environ.get('SNOWFLAKE_PASS'),
+#         database=os.environ.get('SNOWFLAKE_DATABASE'),
+#         role=os.environ.get('ROLE'),
+#         schema=model,
+#         warehouse=os.environ.get('WAREHOUSE')
+#     )
+
+vn.connect_to_snowflake(
+        account=os.environ.get('ACCOUNT'),
+        username=os.environ.get('SNOWFLAKE_USER'),
+        password=os.environ.get('SNOWFLAKE_PASS'),
+        database=os.environ.get('SNOWFLAKE_DATABASE'),
+        role=os.environ.get('ROLE'),
+        schema=st.session_state['vnModel'],
+        warehouse=os.environ.get('WAREHOUSE')
+    )
 st.sidebar.title("Output Settings")
 st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
 st.sidebar.checkbox("Show Table", value=True, key="show_table")
@@ -203,12 +219,14 @@ st.sidebar.checkbox("Show Follow-up Questions", value=False, key="show_followup"
 st.sidebar.checkbox("Show Session State", value=False, key="show_sessionstate")
 st.sidebar.button("Reset/Clear Conversation", on_click=reRunClearApp, use_container_width=True)
 st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which plotting library chat app uses for generating figures (Note:Changing the plotting library is only allowed at the start of a new conversation)')
-st.session_state['vnModel']=st.sidebar.selectbox('Data Mart',options=os.environ.get('ALLOWEDSCHEMAS','MISSING_ALLOWEDSCHEMAS_ENV').split(','),index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
-
+st.session_state['vnModel']=st.sidebar.selectbox('Data Mart',options=os.environ.get('ALLOWEDSCHEMAS','MISSING_ALLOWEDSCHEMAS_ENV').split(','),index=0, 
+                                                #on_change=st.rerun(),
+                                               #  args=(st.session_state['vnModel'],),
+                                                        disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
 
 tab2.subheader("Training Data")
 tab2.button('Delete Training',key='deleteTraining', on_click=deleteTraining)
-tab2.button('Run Automated DB schema Training',key='autoTraining', on_click=vn.runTrainingPlanSnowflake )
+tab2.button('Run Automated DB schema Training',key='autoTraining', on_click= runAutomatedTrainingPlan, args=(st.session_state['vnModel'],os.environ.get('DATABASE'),))
 
 trainingData= vn.get_training_data(schema=st.session_state['vnModel'])
 trainingData.insert(0, "Select", False)
@@ -226,15 +244,6 @@ tab2.button('Submit Q&A',key='submit_Q&A', on_click=trainQuestionAnswer, args=(s
 tab2.markdown("***")
 
 
-vn.connect_to_snowflake(
-    account=os.environ.get('ACCOUNT'),
-    username=os.environ.get('SNOWFLAKE_USER'),
-    password=os.environ.get('SNOWFLAKE_PASS'),
-    database=os.environ.get('DATABASE'),
-    role=os.environ.get('ROLE'),
-    schema=st.session_state['vnModel']
-)
-
 @st.cache_data
 def cache_describeSQLData(prompt: str = None, sql:str =None, additionalInstructions:str =None, df_describe:str =None):
     return vn.describeSQLData(df_describe=df_describe, sql=sql, question=prompt,additionalInstructions=additionalInstructions)
@@ -247,7 +256,7 @@ for message in st.session_state.messages:
         elif message["type"] =='code':
             st.code(message["content"], language="python", line_numbers=True )
         elif message["type"] =='sql':
-            st.code(message["content"], language="sql", line_numbers=True)
+            st.code(message["sql"], language="sql", line_numbers=True)
         # elif message["type"] =='dataframe-preview':
         #     st.markdown('Data Preview (first 5 rows):')
         #     st.dataframe(message["df"])
@@ -327,23 +336,14 @@ if st.session_state.get('show_sessionstate',True):
 
 if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHelp']), disabled= not st.session_state['enableUserTextInput'] ) :
 
-    print('entering 1')
-    # with st.chat_message("assistant"):and st.session_state['enableUserTextInput'] is True 
-    #     questions = vn.generate_questions() 
-
-    #     for i, question in enumerate(questions):
-    #         #time.sleep(0.05)
-    #         button = st.button(
-    #             question,
-    #             on_click=set_question,
-    #             args=(question,),
-    #         )
-    #     st.session_state.messages.append({"role": "assistant", "content": "\n-".join(questions),'type': 'markdown'})
+    vn.logInfo(f'Working with user input:{userResponse}')
+   
     if(st.session_state['prompt'] is  None):
         st.session_state.messages.append({"role": "user", "content": userResponse, "type":"markdown"})
         st.session_state['prompt'] =userResponse
         st.session_state['enableUserTextInput']=False
         st.session_state['enablePlottingDataModelChange'] = False
+        vn.logInfo(f'Set user input as Prompt:{userResponse}')
         st.rerun()
     elif(st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None):
         st.session_state['enableUserTextInput']=False
@@ -357,7 +357,7 @@ if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputH
         st.session_state.messages.append({"role": "user", "content": st.session_state["figureInstructions"],  'type':'markdown'   })
         st.rerun()
 elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None and st.session_state['enableUserTextInput']==False:   
-    print('entering 2') 
+    vn.logInfo('Generating SQL for user prompt') 
 
     st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'], schema=st.session_state['vnModel'])
 
@@ -369,13 +369,18 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
         st.session_state['tempSQL']=None
         st.rerun()
     else:
-        # st.session_state['sql'] = st.session_state['tempSQL']
-        st.session_state["df"] = vn.run_sql(sql=st.session_state['tempSQL'])
-        if st.session_state.get("show_sql", True):
-            st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] , 'df':st.session_state['df'], 'prompt':st.session_state['prompt'], 'nrows':'5',"type":"sql-dataframe"})
-        st.rerun()
+        try:
+            st.session_state["df"] = vn.run_sql(sql=st.session_state['tempSQL'])
+            if st.session_state.get("show_sql", True):
+                st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] , 'df':st.session_state['df'], 'prompt':st.session_state['prompt'], 'nrows':'5',"type":"sql-dataframe"})
+                st.rerun()
+        except Exception as e:
+            vn.logger.error(e)
+            st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] ,"type":"sql"})
+            st.session_state.messages.append({"role": "assistant", 'content': f'There was an error running the generated SQL above:\n{e}', 'type':'error'})
+            st.rerun()
 elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None and st.session_state['sqlInstructions'] is None and st.session_state['enableUserTextInput'] == False :
-    print('entering 3') 
+    vn.logInfo('Checking with user on next steps after generating SQL') 
     
     with st.chat_message("user"):
         st.session_state['sqlRadioInput'] = st.radio(
@@ -395,16 +400,19 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
 
         if fixed_sql_query != "":
             st.session_state.messages.append({"role": "user", "content": "I would like to edit the SQL :pencil2:" , "type":"markdown"  })
-            # st.session_state.messages.append({"role": "user", "content": ":pencil: Edited SQL: ", "type":"markdown"})
-            st.session_state['tempSQL'] = "--Edited SQL:\n"+ fixed_sql_query
-            df = vn.run_sql(sql=st.session_state['tempSQL'])
-            st.session_state.messages.append({"role": "user", "content":  st.session_state['tempSQL'] , "type":"sql"})
-            st.session_state.messages.append({"role": "assistant", 'content':"Result for your edited SQL query","type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", 'df':df, 'nrows':'5',"type":"dataframe"})
-            st.session_state['sqlRadioInput']=None
-            # st.session_state.sqlRadioInput.index = None
-            # st.write(k)
-            # st.rerun()
+
+            st.session_state['tempSQL'] = fixed_sql_query
+            try:
+                df = vn.run_sql(sql=st.session_state['tempSQL'])
+                st.session_state.messages.append({"role": "user", "content":  "--Edited SQL:\n"+st.session_state['tempSQL'] , "type":"sql"})
+                st.session_state.messages.append({"role": "assistant", 'content':"Result for your edited SQL query","type":"markdown"})
+                st.session_state.messages.append({"role": "assistant", 'df':df, 'nrows':'5',"type":"dataframe"})
+                st.session_state['sqlRadioInput']=None
+            except Exception as e:
+                vn.logger.error(e)
+                st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] ,"type":"sql"})
+                st.session_state.messages.append({"role": "assistant", 'content': f'There was an error running the generated SQL above:\n{e}', 'type':'error'})
+                st.rerun()
         else:
             st.stop()
     elif st.session_state['sqlRadioInput'] == "OK :white_check_mark:":
@@ -413,7 +421,7 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
         st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
         st.rerun() 
     elif st.session_state['sqlRadioInput'] == "Instruct Changes (SQL):speaking_head_in_silhouette:":
-        print('entering Instruct Changes')   
+        vn.logInfo(f'User requests to Instruct SQL Changes for sql:{st.session_state["tempSQL"]}')   
         st.session_state['enableUserTextInput'] = True
         st.session_state["tempSQL"] = None
         st.session_state["df"] = None
@@ -426,7 +434,7 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
         st.stop()
 
 elif st.session_state["df"] is not None and st.session_state["tempCode"] is None  and st.session_state["enableUserTextInput"] == False :
-    print('entering 3')   
+    vn.logInfo('Working on generating a Figure for users prompt')   
     df = st.session_state.get("df")
     if st.session_state.get("show_table", True) and st.session_state.get("userUpdateCode") is None:
         if len(df) > 10:
@@ -439,15 +447,15 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
             resetPrompt()
         else:
             st.session_state.messages.append({"role": "assistant", "content": "Here are the results from the query:"  , "type":"markdown"})
-            st.session_state.messages.append({"role": "assistant", "df": df ,"nrows": 'All', "type":"dataframe" })
-            #st.dataframe(df)
+            st.session_state.messages.append({"role": "assistant", "df": df ,"nrows": len(df), "type":"dataframe" })
+    
 
     if st.session_state['figureInstructions'] is None:
         st.session_state["tempCode"] = vn.generate_plot_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df_metadata=df.dtypes,df=df ,chart_instructions='', plottingLib=st.session_state['plottingLib'] )
     else:
         st.session_state["tempCode"] = vn.edit_plot_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df_metadata=df.dtypes,df=df,chart_instructions=st.session_state["figureInstructions"],chart_code=st.session_state["userUpdateCode"],plottingLib=st.session_state['plottingLib']  )
         st.session_state['figureInstructions'] = None
-    print(f'Plot code generated {st.session_state["tempCode"]}')
+    vn.logInfo(f'Plot code generated {st.session_state["tempCode"]}')
     if st.session_state.get("show_plotly_code", True):
         if st.session_state['plottingLib'] == 'Plotly':
             st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
@@ -477,13 +485,13 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
             st.session_state.messages.append({"role": "assistant", "content":"I couldn't generate a chart" , 'type':'error' })
         st.rerun()
 elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None  and st.session_state["figureInstructions"] is None and st.session_state['enableUserTextInput'] == False:
-    print('entering 4') 
+    vn.logInfo('Confirming with user on next steps after generating Figure') 
     with st.chat_message("user"):
         plotyRadioInput = st.radio(
                 "I would like to ...",
                 options=["Instruct Changes (Figure):speaking_head_in_silhouette:","Edit Code Manually :pencil2:", "OK :white_check_mark:",'Instruct Changes (SQL) :rewind:',"Restart with a New Question :wastebasket:"],
                 index=None,
-                captions = ["Tell Data GENIE how the figure should be updated","Edit the Plot code", "Use generated Plot code",'Go back a step and tell Data GENIE to modify the SQL query',"Clear current question and start over"],
+                captions = ["Tell Data GENIE how the figure should be updated","Edit the Plot code", "Generated plot looks good - All Done",'Go back a step and tell Data GENIE to modify the SQL query',"Clear current question and start over"],
                 horizontal = True
             )
     
@@ -497,7 +505,6 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
         if fixed_python_code != "":
             st.session_state.messages.append({"role": "user", "content": "I would like to Edit the Plot Code :pencil2:", 'type':"markdown" })
             st.session_state["code"] = "#Edited Python Code:\n"+python_code_response["text"]
-            # st.session_state.messages.append({"role": "user", "content": ":pencil: Edited code: ", "type":"markdown"})
             st.session_state.messages.append({"role": "user", "content": st.session_state["code"], 'type':'code' })
             st.rerun()
         else:
@@ -508,13 +515,12 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
         st.session_state["code"] = st.session_state["tempCode"]
         st.rerun()
     elif plotyRadioInput == 'Instruct Changes (Figure):speaking_head_in_silhouette:':
-        print('entering Instruct Changes (Figure)')   
+        vn.logInfo('entering Instruct Changes (Figure)')   
         st.session_state['enableUserTextInput'] = True
         st.session_state["fig"] = None
-        # st.session_state["tempCode"] =None
         st.rerun()
     elif plotyRadioInput == 'Instruct Changes (SQL) :rewind:':
-        print('entering Instruct Changes (SQL)')   
+        vn.logInfo('entering Instruct Changes (SQL)')   
         st.session_state.messages.append({"role": "assistant", "content": "Here is the SQL query we have been using, let me know how you wish to change it:"  , "type":"markdown"})
         st.session_state.messages.append({"role": "assistant", "content":  st.session_state['sql'] , "type":"sql"})
         st.session_state['enableUserTextInput'] = True
@@ -532,17 +538,9 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
     else:
         st.stop()
         
-# elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None  and st.session_state["figureInstructions"] is not None:
-#     print('entering 4.5') 
-#     st.session_state.messages.append({"role": "user", "content": st.session_state["figureInstructions"],  'type':'markdown'   })
-#     st.session_state["userUpdateCode"] = st.session_state["tempCode"] 
-#     # st.session_state["figureInstructions"] = None
-#     st.session_state["tempCode"] = None
-#     st.rerun()
-
 elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is None:
 
-    print('entering 6')   
+    vn.logInfo('Confirm with user if the question and sql answer should be saved')   
     with st.chat_message("user"):
         plotyRadioInput = st.radio(
                 "I would like to ...",

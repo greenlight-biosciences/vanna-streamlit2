@@ -1,5 +1,5 @@
 
-from typing import Union
+from typing import Union, List, Union
 from vanna import get_models, set_model
 from vanna.openai.openai_chat import OpenAI_Chat
 from chromasdb_vector import ChromaDB_VectorStore
@@ -14,11 +14,14 @@ import plotly.graph_objects as go
 import altair as alt
 from bokeh.plotting import figure
 from vanna.__init__ import TrainingPlan, TrainingPlanItem
+import logging
+import streamlit as st
 
 class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
     def __init__(self, config=None):
         ChromaDB_VectorStore.__init__(self, config=config)
         OpenAI_Chat.__init__(self, config=config)
+        self.setup_logger()
         #VannaBase.__init__(self, config=config)
 
     # def get_models():
@@ -26,8 +29,25 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
     
     # def set_model():
     #     return set_model()
+    def setup_logger(self):
+        # Configure logging
+        logging.basicConfig(level=logging.INFO, 
+                            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+        # Create a logger
+        self.logger = logging.getLogger(__name__)
+        
     def log(self, message: str):
-        print(message)
+        self.logger.debug(message)
+    def logDebug(self, message: str):
+        self.logger.debug(message)
+    def logError(self, message: str):
+        self.logger.error(message)
+    def logWarning(self, message: str):
+        self.logger.warning(message)
+    def logInfo(self, message: str):
+        self.logger.info(message)
+
 
     def _sanitize_plot_code(self, raw_plot_code: str) -> str:
         # Remove the fig.show() statement from the plotly code
@@ -54,8 +74,8 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             system_msg += f"\n\nThe DataFrame was produced using this query: {sql}\n\n"
 
         system_msg += f"The following is information about the resulting pandas DataFrame 'df': \n{df_metadata}"
-        system_msg += f"\n -NEVER include an fig.show() or show(fig) in your returns"
-        system_msg += f"\n -ALWAYS call the plotting figure or chart variable fig"
+        system_msg += "\n -NEVER include an fig.show() or show(fig) in your returns"
+        system_msg += "\n -ALWAYS call the plotting figure or chart variable fig"
 
         message_log = [
             self.system_message(system_msg),
@@ -88,8 +108,8 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         
         if chart_code is not None:
             system_msg += f"The following is the Python {plottingLib} code that has already been generated for the resulting pandas DataFrame 'df': \n{chart_code}"
-        system_msg += f"\n -NEVER include an fig.show() or show(fig) in your returns"
-        system_msg += f"\n -ALWAYS call the plotting figure or chart variable fig, not p ONLY fig"
+        system_msg += "\n -NEVER include an fig.show() or show(fig) in your returns"
+        system_msg += "\n -ALWAYS call the plotting figure or chart variable fig, not p ONLY fig"
 
         message_log = [
             self.system_message(system_msg),
@@ -102,32 +122,32 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         return self._sanitize_plot_code(self._extract_python_code(plotly_code))
     
-    def promptReview(
-        self, question: str = None, additionalInstructions:str =None, **kwargs ) -> str:
-        if question is not None:
-            if additionalInstructions is not None:
-                question = ( question   + " -- When Reviewing the Prompt also take into account these instuctions: "   + additionalInstructions  )
-            else:
-                question = "When plotting, follow these instructions: "
-            system_msg = f"The following is a pandas DataFrame that contains the results of the query that answers the question the user asked: '{question}'"
-        else:
-            system_msg = "The following is a pandas DataFrame "
+    # def promptReview(
+    #     self, question: str = None, additionalInstructions:str =None, **kwargs ) -> str:
+    #     if question is not None:
+    #         if additionalInstructions is not None:
+    #             question = ( question   + " -- When Reviewing the Prompt also take into account these instuctions: "   + additionalInstructions  )
+    #         else:
+    #             question = "When plotting, follow these instructions: "
+    #         system_msg = f"The following is a pandas DataFrame that contains the results of the query that answers the question the user asked: '{question}'"
+    #     else:
+    #         system_msg = "The following is a pandas DataFrame "
 
-        system_msg += f"The following is information about the resulting pandas DataFrame 'df':"
-        system_msg += f"\n -NEVER include an fig.show() or show(fig) in your returns"
-        system_msg += f"\n -ALWAYS call the plotting figure or chart variable fig"
+    #     system_msg += f"The following is information about the resulting pandas DataFrame 'df':"
+    #     system_msg += f"\n -NEVER include an fig.show() or show(fig) in your returns"
+    #     system_msg += f"\n -ALWAYS call the plotting figure or chart variable fig"
 
-        message_log = [
-            self.system_message(system_msg),
-            self.user_message(
-            #f"Can you generate the Python {plottingLib} code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. If there is only one value in the dataframe, use an Indicator. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
+    #     message_log = [
+    #         self.system_message(system_msg),
+    #         self.user_message(
+    #         #f"Can you generate the Python {plottingLib} code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. If there is only one value in the dataframe, use an Indicator. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
 
-               f"Can you generate the Python code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
-            ),
-        ]
+    #            f"Can you generate the Python code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
+    #         ),
+    #     ]
 
-        plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
-        return self._sanitize_plot_code(self._extract_python_code(plotly_code))
+    #     plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
+    #     return self._sanitize_plot_code(self._extract_python_code(plotly_code))
     
     
     def describeSQLData(
@@ -136,30 +156,31 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             if additionalInstructions is not None:
                 question = ( question   + " -- When describing this data take into account these instructions: "   + additionalInstructions  +"\n")
             else:
-                question = f"Explain the data that is returned"
+                question = "Explain the data that is returned"
 
-        system_msg = f" - You are a data reviewer and you provide three short helpful and easy to understand bullet point explanation statements for the python pandas DataFrame description that is given"
-        system_msg += f" - Take into account the users question when forming your explantation"
+        system_msg = " - You are a data reviewer and you provide three short helpful and easy to understand bullet point explanation statements for the python pandas DataFrame description that is given"
+        system_msg += " - Take into account the users question when forming your explantation"
         system_msg += f" - Here is the question the user asked, that was used to generated the sql and data: '{question}' \n"
-        system_msg += f" - Take into account the SQL query that was generated to answer the users question when forming your explantation"
+        system_msg +=  " - Take into account the SQL query that was generated to answer the users question when forming your explantation"
         system_msg += f" - SQL query used to generate the data and answer the questions is: '{sql}'\n"
         system_msg += f" - Below is the dataframe description from the dataframe which was generated for the question and sql statements above: {df_describe}"
-        system_msg += f" - For Categorical Data try to give the user a sense of what categories are available in columns"
-        system_msg += f" - ONLY use simple words, do not mention anything about dataframes or database query jargon when providing an explanation "
-        system_msg += f" - ENSURE your responses is under 120 words "
+        system_msg += " - For Categorical Data try to give the user a sense of what categories are available in columns"
+        system_msg += " - ONLY use simple words, do not mention anything about dataframes or database query jargon when providing an explanation "
+        system_msg += " - ENSURE your responses is under 120 words "
 
         message_log = [
             self.system_message(system_msg),
             self.user_message(
             #f"Can you generate the Python {plottingLib} code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. If there is only one value in the dataframe, use an Indicator. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
 
-               f"Provide an explanation for the data as it pertains to my question"
+               "Provide an explanation for the data as it pertains to my question"
             ),
         ]
-        #self.log(message_log)
+        #self.logDebug(message_log)
         sqlDataDesc = self.submit_prompt(message_log, kwargs=kwargs)
         return sqlDataDesc
     
+    # @st.cache_resource
     def connect_to_snowflake(
         self,
         account: str,
@@ -223,14 +244,20 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         def run_sql_snowflake(sql: str) -> pd.DataFrame:
             cs = conn.cursor()
 
-            #not needed is setting role, warehouse, database and schema on connection
-            # if role is not None:
-            #     cs.execute(f"USE ROLE {role}")
+            if role is not None:
+                roleSQL = f"USE ROLE {role}"
+                cs.execute(roleSQL)
 
-            # if warehouse is not None:
-            #     cs.execute(f"USE WAREHOUSE {warehouse}")
-            # cs.execute(f"USE DATABASE {database}")
+            if warehouse is not None:
+                warehouseSQL= f"USE WAREHOUSE {warehouse}"
+                cs.execute(warehouseSQL)
+            
+            dbuseSQL= f"USE DATABASE {database}"
+            cs.execute(dbuseSQL)
 
+            dbuseschema= f"USE SCHEMA {schema}"
+            cs.execute(dbuseschema)
+            
             cur = cs.execute(sql)
 
             results = cur.fetchall()
@@ -253,15 +280,8 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             query_params["tag"] = tag
 
         return ChromaDB_VectorStore._extract_documents(
-            self.documentation_collection.query(**query_params)
-        )
+            self.documentation_collection.query(**query_params))
     
-    def runTrainingPlanSnowflake(self):
-        plan = self.get_training_plan_snowflake()
-        self.log("Running Training Plan")
-        self.log(plan)
-        self.train(plan=plan)
-
     def get_sql_prompt(
         self,
         question: str,
@@ -286,7 +306,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         for example in question_sql_list:
             if example is None:
-                print("example is None")
+                self.logInfo("example is None")
             else:
                 if example is not None and "question" in example and "sql" in example:
                     message_log.append(OpenAI_Chat.user_message(example["question"]))
@@ -328,17 +348,17 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         # If the llm_response contains a markdown code block, with or without the sql tag, extract the sql from it
         sql = re.search(r"```sql\n(.*)```", llm_response, re.DOTALL)
         if sql:
-            self.log(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            self.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
         # Regular expression pattern to match a SQL query
         sql = re.search(r"(SELECT\s+.*?;)", llm_response,  re.IGNORECASE | re.DOTALL)
         if sql:
-            self.log(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            self.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
         
         sql = re.search(r"```(.*)```", llm_response, re.DOTALL)
         if sql:
-            self.log(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            self.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
         
         return llm_response
@@ -385,7 +405,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
             fig = ldict.get("fig", None)
         except Exception as e:
-            print(e)
+            self.logger.error(e)
             # Inspect data types
             numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
             categorical_cols = df.select_dtypes(
@@ -433,7 +453,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             if fig is None:
                 fig = ldict.get("chart", None)
         except Exception as e:
-            print(e)
+            self.logger.error(e)
             fig = alt.Chart(df).mark_text().encode(
                 text=alt.Text(value='Error in creating the chart')
             )
@@ -466,7 +486,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             else:
                 Exception('Failed to generate Figure')
         except Exception as e:
-            print(e)
+            self.logger.error(e)
             fig = figure(title="Error in creating the figure")
             fig.text(x=0, y=0, text=['Error'])
 
@@ -510,31 +530,45 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         """
 
         if question and not sql:
-            raise ValidationError(f"Please also provide a SQL query")
+            raise ValidationError("Please also provide a SQL query")
 
         if documentation:
-            print("Adding documentation....")
+            self.logInfo("Adding documentation....")
             return self.add_documentation(documentation,schema=schema)
 
         if sql:
             if question is None:
                 question = self.generate_question(sql)
-                print("Question generated with sql:", question, "\nAdding SQL...")
+                self.logInfo("Question generated with sql:", question, "\nAdding SQL...")
             return self.add_question_sql(question=question, sql=sql,schema=schema)
 
         if ddl:
-            print("Adding ddl:", ddl)
+            self.logInfo("Adding ddl:", ddl)
             return self.add_ddl(ddl,schema=schema)
 
         if plan:
             for item in plan._plan:
                 if item.item_type == TrainingPlanItem.ITEM_TYPE_DDL:
-                    self.add_ddl(item.item_value)
+                    self.add_ddl(item.item_value,schema=schema)
                 elif item.item_type == TrainingPlanItem.ITEM_TYPE_IS:
-                    self.add_documentation(item.item_value)
+                    self.add_documentation(item.item_value,schema=schema)
                 elif item.item_type == TrainingPlanItem.ITEM_TYPE_SQL:
-                    self.add_question_sql(question=item.item_name, sql=item.item_value)
-                    
+                    self.add_question_sql(question=item.item_name, sql=item.item_value, schema=schema)
+    
+    def _get_databases(self) -> List[str]:
+        try:
+            self.logInfo("Trying INFORMATION_SCHEMA.DATABASES")
+            df_databases = self.run_sql("SELECT * FROM INFORMATION_SCHEMA.DATABASES")
+        except Exception as e:
+            self.logError(e)
+            try:
+                self.logError("Trying SHOW DATABASES")
+                df_databases = self.run_sql("SHOW DATABASES")
+            except Exception as e:
+                self.logError(e)
+                return []
+
+        return df_databases["DATABASE_NAME"].unique().tolist()                
     def trainVN(self, input , type, question =None,schema:str=None):
         if type =='ddl':
             return self.train(ddl=input,schema=schema)
@@ -546,6 +580,155 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                return  self.train(sql=input, question=question,schema=schema)
             else:
                 return self.train(sql=input,schema=schema) 
+    
+    def _get_information_schema_tables(self, database: str, schema) -> pd.DataFrame:
+        df_tables = self.run_sql(f"SELECT * FROM {database}.INFORMATION_SCHEMA.TABLES where TABLE_SCHEMA ='{schema}'")
+        return df_tables
+    
+    def get_training_plan_snowflake(
+        self,
+        filter_databases: Union[List[str], None] = None,
+        filter_schemas: Union[List[str], None] = None,
+        include_information_schema: bool = False,
+        use_historical_queries: bool = True,
+    ) -> TrainingPlan:
+        plan = TrainingPlan([])
+
+        if self.run_sql_is_set is False:
+            raise ImproperlyConfigured("Please connect to a database first.")
+
+        if use_historical_queries:
+            try:
+                self.logInfo("Trying query history")
+                df_history = self.run_sql(
+                    """ select * from table(information_schema.query_history(result_limit => 5000)) order by start_time"""
+                )
+
+                df_history_filtered = df_history.query("ROWS_PRODUCED > 1")
+                if filter_databases is not None:
+                    mask = (
+                        df_history_filtered["QUERY_TEXT"]
+                        .str.lower()
+                        .apply(
+                            lambda x: any(
+                                s in x for s in [s.lower() for s in filter_databases]
+                            )
+                        )
+                    )
+                    df_history_filtered = df_history_filtered[mask]
+
+                if filter_schemas is not None:
+                    mask = (
+                        df_history_filtered["QUERY_TEXT"]
+                        .str.lower()
+                        .apply(
+                            lambda x: any(
+                                s in x for s in [s.lower() for s in filter_schemas]
+                            )
+                        )
+                    )
+                    df_history_filtered = df_history_filtered[mask]
+
+                if len(df_history_filtered) > 10:
+                    df_history_filtered = df_history_filtered.sample(10)
+
+                for query in df_history_filtered["QUERY_TEXT"].unique().tolist():
+                    plan._plan.append(
+                        TrainingPlanItem(
+                            item_type=TrainingPlanItem.ITEM_TYPE_SQL,
+                            item_group="",
+                            item_name=self.generate_question(query),
+                            item_value=query,
+                        )
+                    )
+
+            except Exception as e:
+                self.logError(e)
+
+        databases = self._get_databases()
+
+        for database in databases:
+            if filter_databases is not None and database not in filter_databases:
+                continue
+
+            try:
+                df_tables = self._get_information_schema_tables(database=database, schema=filter_schemas)
+
+                self.logInfo(f"Trying INFORMATION_SCHEMA.COLUMNS for {database}")
+                df_columns = self.run_sql(
+                    f"SELECT * FROM {database}.INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA ='{filter_schemas}'"
+                )
+
+                self.logInfo(f'Filtered Schemas {filter_schemas}')
+      
+                for schema in df_tables["TABLE_SCHEMA"].unique().tolist():
+                    self.logInfo(f'Trying Schema {filter_schemas}')
+                    if filter_schemas is not None and schema not in filter_schemas:
+                        self.logInfo(f'Filtered Schemas {filter_schemas}')
+                        continue
+
+                    if (
+                        not include_information_schema
+                        and schema == "INFORMATION_SCHEMA"
+                    ):
+                        continue
+
+                    df_columns_filtered_to_schema = df_columns.query(
+                        f"TABLE_SCHEMA == '{schema}'"
+                    )
+
+                    try:
+                        tables = (
+                            df_columns_filtered_to_schema["TABLE_NAME"]
+                            .unique()
+                            .tolist()
+                        )
+
+                        for table in tables:
+                            df_columns_filtered_to_table = (
+                                df_columns_filtered_to_schema.query(
+                                    f"TABLE_NAME == '{table}'"
+                                )
+                            )
+                            doc = f"The following columns are in the {table} table in the {database} database:\n\n"
+                            doc += df_columns_filtered_to_table[
+                                [
+                                    "TABLE_CATALOG",
+                                    "TABLE_SCHEMA",
+                                    "TABLE_NAME",
+                                    "COLUMN_NAME",
+                                    "DATA_TYPE",
+                                    "COMMENT",
+                                ]
+                            ].to_markdown()
+
+                            plan._plan.append(
+                                TrainingPlanItem(
+                                    item_type=TrainingPlanItem.ITEM_TYPE_IS,
+                                    item_group=f"{database}.{schema}",
+                                    item_name=table,
+                                    item_value=doc,
+                                )
+                            )
+
+                    except Exception as e:
+                        self.logError(e)
+                        pass
+            except Exception as e:
+                self.logError(e)
+
+        return plan
+            
+    def runTrainingPlanSnowflake(self, schema:str=None, database:str=None):
+        plan = self.get_training_plan_snowflake(filter_databases= database,
+                                                 filter_schemas=schema, 
+                                                 include_information_schema=True,
+                                                 use_historical_queries = False)
+        self.logInfo(f"Running Training Plan for DB:{database}")
+        self.logInfo(f"Running Training Plan for Schema {schema}")
+
+        self.logInfo(plan)
+        self.train(plan=plan,schema=schema)
     # def get_similar_question_sql(self, question: str, tag=None, **kwargs) -> list:
     #     query_params = {
     #         "query_texts": [question],

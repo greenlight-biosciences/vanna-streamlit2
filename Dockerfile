@@ -18,8 +18,8 @@ RUN poetry config virtualenvs.create false
 RUN poetry install --no-dev
 
 WORKDIR /usr/src/app/DataGenie
-EXPOSE 8501
+EXPOSE 80
 
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
 
-ENTRYPOINT ["poetry", "run", "streamlit","run", "dataGenieApp.py" , "--server.port=8501", "--server.address=0.0.0.0"]
+ENTRYPOINT ["poetry", "run", "streamlit","run", "dataGenieApp.py" , "--server.port=80", "--server.address=0.0.0.0"]
