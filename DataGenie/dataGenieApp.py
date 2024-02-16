@@ -8,9 +8,7 @@ from myVanna  import *
 import os
 from dotenv import load_dotenv
 from streamlit_modal import Modal
-
-
-# load_dotenv(".env")
+from streamlit.web.server.websocket_headers import _get_websocket_headers
 
 
 vn= MyVanna(
@@ -24,9 +22,19 @@ vn= MyVanna(
         'authtype': os.environ.get("CHROMASDBAUTHTYPE"),
         'path':os.environ.get("FILE_SHARE_PATH","."),
 })
-# vn.connect_to_sqlite('biotech_database.db') 
 
+appTitle = os.environ.get("APPTITLE")
+menu_items ={"Get help":os.environ.get("GETHELPURL"), "Report a Bug":os.environ.get("SUBMITTICKETURL") }
+st.set_page_config(layout="wide", page_title =appTitle, menu_items =menu_items )
+st.title(appTitle)
 
+@st.cache_data
+def getUserID(): 
+    headers = _get_websocket_headers()
+    user_email ='testuser@greenlightbio.com'
+    if "X-Ms-Client-Principal-Name" in headers:
+        user_email = headers["X-Ms-Client-Principal-Name"]
+    return user_email.split('@')[0]
 
 # Initialize app state variables
 if "messages" not in st.session_state:
@@ -55,6 +63,7 @@ if "messages" not in st.session_state:
     st.session_state.uniqWidgetCounter =0
     st.session_state.sqlRadioInput = None
     st.session_state.enablePlottingDataModelChange = True
+    st.session_state.UserID= getUserID()
     userResponse = None
 
 
@@ -151,11 +160,7 @@ def trainDDL(ddl):
 def runAutomatedTrainingPlan(schema:str=None, database:str='PH_DATALAKE_DEV'):
     vn.runTrainingPlanSnowflake(schema=schema, database=database)
 
-appTitle = os.environ.get("APPTITLE")
-menu_items ={"Get help":os.environ.get("GETHELPURL"), "Report a Bug":os.environ.get("SUBMITTICKETURL") }
-st.set_page_config(layout="wide", page_title =appTitle, menu_items =menu_items )
-st.title(appTitle)
-tab1,tab2 = st.tabs(['Chatbot',"🗃 SQL KnowledgeBase"])
+tab1,tab2,tab3 = st.tabs(['Chatbot',"🗃 SQL KnowledgeBase", 'Introduction Guide'])
 
 def deleteTraining():
     selected_rows = selectedForDeletion[selectedForDeletion['Select']]
@@ -190,16 +195,40 @@ def generate_uniqObjectName(object:str='obj'):
     return f'{current_time}-{object}-{st.session_state["uniqWidgetCounter"]}'
 
 # @st.cache_resource
-# def runSnowflakeConn(model:str=st.session_state['vnModel']):
-#     vn.connect_to_snowflake(
-#         account=os.environ.get('ACCOUNT'),
-#         username=os.environ.get('SNOWFLAKE_USER'),
-#         password=os.environ.get('SNOWFLAKE_PASS'),
-#         database=os.environ.get('SNOWFLAKE_DATABASE'),
-#         role=os.environ.get('ROLE'),
-#         schema=model,
-#         warehouse=os.environ.get('WAREHOUSE')
-#     )
+    # vn.connect_to_snowflake(
+    #     account=os.environ.get('ACCOUNT'),
+    #     username=os.environ.get('SNOWFLAKE_USER'),
+    #     password=os.environ.get('SNOWFLAKE_PASS'),
+    #     database=os.environ.get('SNOWFLAKE_DATABASE'),
+    #     role=os.environ.get('ROLE'),
+    #     schema=model,
+    #     warehouse=os.environ.get('WAREHOUSE'))
+    
+
+
+
+st.sidebar.title("Output Settings")
+
+def changeSchemaCallback():
+    vn.logInfo(f"Schema Changed to: {st.session_state['vnModel']}")
+
+st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
+st.sidebar.checkbox("Show Table", value=True, key="show_table")
+st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
+st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
+st.sidebar.checkbox("Show Follow-up Questions", value=False, key="show_followup")
+st.sidebar.checkbox("Show Session State", value=False, key="show_sessionstate")
+st.sidebar.button("Reset/Clear Conversation", on_click=reRunClearApp, use_container_width=True)
+st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which plotting library chat app uses for generating figures (Note:Changing the plotting library is only allowed at the start of a new conversation)')
+vnModelValue=st.sidebar.selectbox('Data Mart',options=os.environ.get('ALLOWEDSCHEMAS','MISSING_ALLOWEDSCHEMAS_ENV').split(','),index=0, 
+                                                on_change=changeSchemaCallback,
+                                                #on_change=vn.connect_to_snowflake(),
+                                                #args=(st.session_state['vnModel'],), 
+                                                key='vnModel',
+                                                        disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
+vn.logInfo(f"Confirming Schema Changed to: {vnModelValue}")
+# st.sidebar.subheader( "Welcome User:"+ st.session_state['UserID'])
+
 
 vn.connect_to_snowflake(
         account=os.environ.get('ACCOUNT'),
@@ -210,19 +239,6 @@ vn.connect_to_snowflake(
         schema=st.session_state['vnModel'],
         warehouse=os.environ.get('WAREHOUSE')
     )
-st.sidebar.title("Output Settings")
-st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
-st.sidebar.checkbox("Show Table", value=True, key="show_table")
-st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
-st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
-st.sidebar.checkbox("Show Follow-up Questions", value=False, key="show_followup")
-st.sidebar.checkbox("Show Session State", value=False, key="show_sessionstate")
-st.sidebar.button("Reset/Clear Conversation", on_click=reRunClearApp, use_container_width=True)
-st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which plotting library chat app uses for generating figures (Note:Changing the plotting library is only allowed at the start of a new conversation)')
-st.session_state['vnModel']=st.sidebar.selectbox('Data Mart',options=os.environ.get('ALLOWEDSCHEMAS','MISSING_ALLOWEDSCHEMAS_ENV').split(','),index=0, 
-                                                #on_change=st.rerun(),
-                                               #  args=(st.session_state['vnModel'],),
-                                                        disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
 
 tab2.subheader("Training Data")
 tab2.button('Delete Training',key='deleteTraining', on_click=deleteTraining)
@@ -374,8 +390,11 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
             if st.session_state.get("show_sql", True):
                 st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] , 'df':st.session_state['df'], 'prompt':st.session_state['prompt'], 'nrows':'5',"type":"sql-dataframe"})
                 st.rerun()
+            else:
+                st.session_state.messages.append({"role": "assistant", "content": 'I was able to successfully write a query for your question' , "type":"markdown"})
+                st.rerun()
         except Exception as e:
-            vn.logger.error(e)
+            vn.logError(e)
             st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] ,"type":"sql"})
             st.session_state.messages.append({"role": "assistant", 'content': f'There was an error running the generated SQL above:\n{e}', 'type':'error'})
             st.rerun()
@@ -404,12 +423,12 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
             st.session_state['tempSQL'] = fixed_sql_query
             try:
                 df = vn.run_sql(sql=st.session_state['tempSQL'])
-                st.session_state.messages.append({"role": "user", "content":  "--Edited SQL:\n"+st.session_state['tempSQL'] , "type":"sql"})
+                st.session_state.messages.append({"role": "user", "sql":  "--Edited SQL:\n"+st.session_state['tempSQL'] , "type":"sql"})
                 st.session_state.messages.append({"role": "assistant", 'content':"Result for your edited SQL query","type":"markdown"})
                 st.session_state.messages.append({"role": "assistant", 'df':df, 'nrows':'5',"type":"dataframe"})
                 st.session_state['sqlRadioInput']=None
             except Exception as e:
-                vn.logger.error(e)
+                vn.logError(e)
                 st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] ,"type":"sql"})
                 st.session_state.messages.append({"role": "assistant", 'content': f'There was an error running the generated SQL above:\n{e}', 'type':'error'})
                 st.rerun()
@@ -522,7 +541,7 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
     elif plotyRadioInput == 'Instruct Changes (SQL) :rewind:':
         vn.logInfo('entering Instruct Changes (SQL)')   
         st.session_state.messages.append({"role": "assistant", "content": "Here is the SQL query we have been using, let me know how you wish to change it:"  , "type":"markdown"})
-        st.session_state.messages.append({"role": "assistant", "content":  st.session_state['sql'] , "type":"sql"})
+        st.session_state.messages.append({"role": "assistant", "sql":  st.session_state['sql'] , "type":"sql"})
         st.session_state['enableUserTextInput'] = True
         st.session_state["tempCode"] =None
         st.session_state["fig"] = None

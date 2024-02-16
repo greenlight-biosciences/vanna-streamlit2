@@ -322,7 +322,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                 elif message["type"] =='code':
                     message_log.append({"role": message['role'], "content":message["content"]})
                 elif message["type"] =='sql':
-                    message_log.append({"role": message['role'], "content":message["content"]})
+                    message_log.append({"role": message['role'], "content":message["sql"]})
                 elif message["type"] =='dataframe':
                     message_log.append({"role": message['role'], "content":message["df"].head(int(message["nrows"])).to_string()})
                 elif message["type"] =='sql-dataframe':
@@ -341,7 +341,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                 else:
                     message_log.append({"role": message['role'], "content":message["content"]})
 
-        # print(message_log)
+        self.logInfo(message_log)
         return message_log
     
     def extract_sql(self, llm_response: str) -> str:
@@ -729,7 +729,9 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         self.logInfo(plan)
         self.train(plan=plan,schema=schema)
-    # def get_similar_question_sql(self, question: str, tag=None, **kwargs) -> list:
+
+
+    # def get_similar_question_sql(self, question: str, tag=None, schema:str **kwargs) -> list:
     #     query_params = {
     #         "query_texts": [question],
     #     }
