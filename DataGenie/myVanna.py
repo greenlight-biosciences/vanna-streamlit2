@@ -269,18 +269,6 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         self.run_sql = run_sql_snowflake
         self.run_sql_is_set = True
-
-    def get_related_documentation(self, question: str, tag=None, **kwargs) -> list:
-        query_params = {
-            "query_texts": [question],
-        }
-
-        # Add the tag to the query if it's provided
-        if tag is not None:
-            query_params["tag"] = tag
-
-        return ChromaDB_VectorStore._extract_documents(
-            self.documentation_collection.query(**query_params))
     
     def get_sql_prompt(
         self,
@@ -729,34 +717,3 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         self.logInfo(plan)
         self.train(plan=plan,schema=schema)
-
-
-    # def get_similar_question_sql(self, question: str, tag=None, schema:str **kwargs) -> list:
-    #     query_params = {
-    #         "query_texts": [question],
-    #     }
-
-    #     # Add the tag to the query if it's provided
-    #     if tag is not None:
-    #         query_params["tag"] = tag
-
-    #     return ChromaDB_VectorStore._extract_documents(
-    #         self.sql_collection.query(
-    #             **query_params
-    #         )
-    #     )
-
-    # def get_related_ddl(self, question: str, tag=None, **kwargs) -> list:
-    #     query_params = {
-    #         "query_texts": [question],
-    #     }
-
-    #     # Add the tag to the query if it's provided
-    #     if tag is not None:
-    #         query_params["tag"] = tag
-
-    #     return ChromaDB_VectorStore._extract_documents(
-    #         self.ddl_collection.query(
-    #             **query_params
-    #         )
-    #     )
