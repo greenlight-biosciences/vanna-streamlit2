@@ -1,11 +1,13 @@
 version: '3.8'
+name: datagenie
 services:
-  datagenie:
+  chatapp:
     build: .
     ports:
       - "8501:8501"
-    env_file:
-      - .env
+    image: datagenie
+    # env_file:
+    #   - .env
     networks:
       custom_network:
         ipv4_address: 172.28.1.2
@@ -22,20 +24,20 @@ services:
       - SNOWFLAKE_PASS=${SNOWFLAKE_PASS}
       - ACCOUNT=${ACCOUNT}
       - WAREHOUSE=${WAREHOUSE}
-      - DATABASE={$DATABASE}
-      - SCHEMA=${SCHEMA}
+      - SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE}
+      - ALLOWEDSCHEMAS=${ALLOWEDSCHEMAS}
       - ROLE=${ROLE}
       - APPTITLE=${APPTITLE}
       - GETHELPURL=${GETHELPURL}
       - SUBMITTICKETURL=${SUBMITTICKETURL}
     depends_on:
-      - datagenie-chromasdb
-  datagenie-chromasdb:
+      - chromasdb
+  chromasdb:
     image: "chromadb/chroma" 
     ports:
       - "8000:8000"
-    env_file:
-      - .env2
+    # env_file:
+    #   - .env2
     environment:
       - CHROMA_SERVER_AUTH_CREDENTIALS=${CHROMA_SERVER_AUTH_CREDENTIALS}
       - CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=${CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER}
