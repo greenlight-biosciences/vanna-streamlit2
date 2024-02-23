@@ -74,7 +74,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             system_msg += f"\n\nThe DataFrame was produced using this query: {sql}\n\n"
 
         system_msg += f"The following is information about the resulting pandas DataFrame 'df': \n{df_metadata}"
-        system_msg += "\n -Always ensure that the pandas DataFrame column names are matched EXACTLY when generating plot code"
+        system_msg += "\n -IMPORTANT: When referencing the pandas DataFrame, it is CRUCIAL to ensure that column names are matched EXACTLY when generating plot code. This is NON-NEGOTIABLE for accurate data visualization."
         system_msg += "\n -NEVER include an fig.show() or show(fig) in your returns"
         system_msg += "\n -ALWAYS call the plotting figure or chart variable fig"
 
@@ -86,7 +86,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                f"Can you generate the Python {plottingLib} code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
             ),
         ]
-
+        self.logInfo(message_log)
         plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
         return self._sanitize_plot_code(self._extract_python_code(plotly_code))
     
@@ -118,7 +118,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                 f"Can you update the Python {plottingLib} code to meet the user's plotting instructions and chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. If there is only one value in the dataframe, use an Indicator. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
             ),
         ]
-
+        self.logInfo(message_log)
         plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
 
         return self._sanitize_plot_code(self._extract_python_code(plotly_code))
@@ -281,7 +281,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         questionMemoryLen: int = 2,
         **kwargs,
     ):
-        initial_prompt = "The user provides a question and you provide SQL. You will only respond with SQL code and not with any explanations.\n\nRespond with ONLY with SQL code from 'SELECT' to the ';'. In the SQL code, do your best to provide nicely named columns along additional metadata columns to answer the question. Do not answer with any explanations -- just the select statement code from 'SELECT' to the ';'.\n"
+        initial_prompt = "The user provides a question and you provide SQL code to run on Snowflake database. You will only respond with SQL code and not with any explanations.\n\nRespond with ONLY with SQL code, you may respond using a 'SELECT' or 'WITH' for complex queries, ending you responses at ';'. In the SQL code, do your best to provide nicely named columns along additional metadata columns to answer the question. Do not answer with any explanations -- just the sql code from 'SELECT' or 'WITH' to the ';'.\n"
 
         initial_prompt = OpenAI_Chat.add_ddl_to_prompt(
             initial_prompt, ddl_list, max_tokens=14000
@@ -340,7 +340,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             self.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
         # Regular expression pattern to match a SQL query
-        sql = re.search(r"(SELECT\s+.*?;)", llm_response,  re.IGNORECASE | re.DOTALL)
+        sql = re.search(r"((WITH\s+.+?\s+AS\s.+)|(SELECT\s+.+?));", llm_response,  re.IGNORECASE | re.DOTALL)
         if sql:
             self.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)

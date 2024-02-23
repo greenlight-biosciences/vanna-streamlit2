@@ -382,7 +382,7 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
 
     st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'], schema=st.session_state['vnModel'])
 
-    if is_select_statement(st.session_state['tempSQL']) == False:
+    if detect_sql_statement_at_line_start(st.session_state['tempSQL']) == False:
         #responses is not a select statement let user ask again
         st.session_state.messages.append({"role": "assistant", "content": st.session_state['tempSQL'] , "type":"markdown"})
         st.session_state['enableUserTextInput']=True
@@ -493,7 +493,7 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
 
         st.session_state.messages.append({"role": "assistant", "fig": st.session_state["fig"] ,'code':st.session_state["tempCode"], 'figtype': st.session_state['plottingLib'], "type":"figure-code" })
         if plottingError is not None:
-            st.session_state.messages.append({"role": "assistant", "content": f"An error coccured when generating the figure above:\n {plottingError}" , 'type':'error' })
+            st.session_state.messages.append({"role": "assistant", "content": f"An error occured when generating the figure above:\n {plottingError}" , 'type':'error' })
         st.rerun()
     elif st.session_state.get("show_chart", True):
         if st.session_state["fig"] is not None:
@@ -509,7 +509,7 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
             st.session_state.messages.append({"role": "assistant", "content": f"For your question: {st.session_state['prompt']} - I was able to generate this figure:"  , "type":"markdown"})
             st.session_state.messages.append({"role": "assistant", "content": st.session_state["fig"]  , 'figtype':st.session_state['plottingLib'], 'type':'figure' })
         else:
-            st.session_state.messages.append({"role": "assistant", "content": f"An error coccured when generating the figure above:\n {plottingError}" , 'type':'error' })
+            st.session_state.messages.append({"role": "assistant", "content": f"An error occurred when generating the figure above:\n {plottingError}" , 'type':'error' })
         st.rerun()
 elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None  and st.session_state["figureInstructions"] is None and st.session_state['enableUserTextInput'] == False:
     vn.logInfo('Confirming with user on next steps after generating Figure') 
