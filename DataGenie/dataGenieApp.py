@@ -28,12 +28,13 @@ menu_items ={"Get help":os.environ.get("GETHELPURL"), "Report a Bug":os.environ.
 st.set_page_config(layout="wide", page_title =appTitle, menu_items =menu_items )
 st.title(appTitle)
 
-@st.cache_data
+
 def getUserID(): 
     headers = _get_websocket_headers()
     user_email ='testuser@greenlightbio.com'
     if "X-Ms-Client-Principal-Name" in headers:
         user_email = headers["X-Ms-Client-Principal-Name"]
+        vn.logInfo(f'Logged in user: {user_email}')
     return user_email.split('@')[0]
 
 # Initialize app state variables
@@ -63,9 +64,11 @@ if "messages" not in st.session_state:
     st.session_state.uniqWidgetCounter =0
     st.session_state.sqlRadioInput = None
     st.session_state.enablePlottingDataModelChange = True
-    st.session_state.UserID= getUserID()
+    st.session_state.UserID= None
     userResponse = None
 
+st.session_state['UserID'] = getUserID()
+st.markdown( f"##### Welcome : {st.session_state['UserID']}")
 
 def resetPrompt():
     st.session_state['prompt'] = None
@@ -212,11 +215,11 @@ st.sidebar.title("Output Settings")
 def changeSchemaCallback():
     vn.logInfo(f"Schema Changed to: {st.session_state['vnModel']}")
 
-st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
-st.sidebar.checkbox("Show Table", value=True, key="show_table")
-st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
-st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
-st.sidebar.checkbox("Show Follow-up Questions", value=False, key="show_followup")
+st.sidebar.checkbox("Show SQL", value=True, key="show_sql", disabled=True)
+st.sidebar.checkbox("Show Table", value=True, key="show_table", disabled=True)
+st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code", disabled=True)
+st.sidebar.checkbox("Show Chart", value=True, key="show_chart", disabled=True)
+st.sidebar.checkbox("Show Follow-up Questions", value=False, key="show_followup", disabled=True)
 st.sidebar.checkbox("Show Session State", value=False, key="show_sessionstate")
 st.sidebar.button("Reset/Clear Conversation", on_click=reRunClearApp, use_container_width=True)
 st.session_state['plottingLib']=st.sidebar.selectbox('Plotting Library',options=['Plotly','Altair','Bokeh'],index=0, disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which plotting library chat app uses for generating figures (Note:Changing the plotting library is only allowed at the start of a new conversation)')
@@ -227,7 +230,6 @@ vnModelValue=st.sidebar.selectbox('Data Mart',options=os.environ.get('ALLOWEDSCH
                                                 key='vnModel',
                                                         disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
 vn.logInfo(f"Confirming Schema Changed to: {vnModelValue}")
-# st.sidebar.subheader( "Welcome User:"+ st.session_state['UserID'])
 
 
 vn.connect_to_snowflake(
@@ -266,87 +268,90 @@ def cache_describeSQLData(prompt: str = None, sql:str =None, additionalInstructi
 
 
 for message in st.session_state.messages:
-    with tab1.chat_message(message["role"]):
-        if message["type"] =='markdown':
-            st.markdown(message["content"])
-        elif message["type"] =='code':
-            st.code(message["content"], language="python", line_numbers=True )
-        elif message["type"] =='sql':
-            st.code(message["sql"], language="sql", line_numbers=True)
-        # elif message["type"] =='dataframe-preview':
-        #     st.markdown('Data Preview (first 5 rows):')
-        #     st.dataframe(message["df"])
-        #     st.download_button(
-        #         key=generate_uniqObjectName('df-download2'),
-        #         label=":floppy_disk: Download All Data as CSV",
-        #         data=convert_df(message["df"]),
-        #         file_name=generate_fileName(),
-        #         mime='text/csv', disabled=message["df"].empty) 
-        elif message["type"] =='dataframe':
-            st.markdown(f'Data (first {message["nrows"]} rows):')
-            st.dataframe(message["df"].head(int(message["nrows"])))
-            st.download_button(
-                key=generate_uniqObjectName('df-download2'),
-                label=":floppy_disk: Download All Data as CSV",
-                data=convert_df(message["df"]),
-                file_name=generate_fileName(),
-                mime='text/csv',disabled=message["df"].empty) 
-        elif message["type"] =='sql-dataframe':
-            col1, col2 ,col3= st.columns([2, 2,1], )
-            col1.markdown('Here is a the generated SQL query for your question:')
-            col1.code(message["sql"], language="sql", line_numbers=True)
-            col2.markdown(f"Data Preview (first {message['nrows']} rows):")
-            col2.dataframe(message["df"].head(int(message["nrows"])))
-            col2.download_button(
-                key=generate_uniqObjectName('df-download2'),
-                label=":floppy_disk: Download All Data as CSV",
-                data=convert_df(message["df"]),
-                file_name=generate_fileName(),
-                mime='text/csv',disabled=message["df"].empty)
-            
-            dataViewModal = Modal(
-                    "Inspect Data", 
-                    key="viewdata-modal",
-                    
-                    # Optional
-                    padding=20,    # default value
-                    max_width=744  # default value,
-                )
-            if(col2.button('Inspect Data :mag:',key=generate_uniqObjectName('btInspect-Data'),disabled=message["df"].empty  )):
-                dataViewModal.open()
+    try:
+        with tab1.chat_message(message["role"]):
+            if message["type"] =='markdown':
+                st.markdown(message["content"])
+            elif message["type"] =='code':
+                st.code(message["content"], language="python", line_numbers=True )
+            elif message["type"] =='sql':
+                st.code(message["sql"], language="sql", line_numbers=True)
+            # elif message["type"] =='dataframe-preview':
+            #     st.markdown('Data Preview (first 5 rows):')
+            #     st.dataframe(message["df"])
+            #     st.download_button(
+            #         key=generate_uniqObjectName('df-download2'),
+            #         label=":floppy_disk: Download All Data as CSV",
+            #         data=convert_df(message["df"]),
+            #         file_name=generate_fileName(),
+            #         mime='text/csv', disabled=message["df"].empty) 
+            elif message["type"] =='dataframe':
+                st.markdown(f'Data (first {message["nrows"]} rows):')
+                st.dataframe(message["df"].head(int(message["nrows"])))
+                st.download_button(
+                    key=generate_uniqObjectName('df-download2'),
+                    label=":floppy_disk: Download All Data as CSV",
+                    data=convert_df(message["df"]),
+                    file_name=generate_fileName(),
+                    mime='text/csv',disabled=message["df"].empty) 
+            elif message["type"] =='sql-dataframe':
+                col1, col2 ,col3= st.columns([2, 2,1], )
+                col1.markdown('Here is a the generated SQL query for your question:')
+                col1.code(message["sql"], language="sql", line_numbers=True)
+                col2.markdown(f"Data Preview (first {message['nrows']} rows):")
+                col2.dataframe(message["df"].head(int(message["nrows"])))
+                col2.download_button(
+                    key=generate_uniqObjectName('df-download2'),
+                    label=":floppy_disk: Download All Data as CSV",
+                    data=convert_df(message["df"]),
+                    file_name=generate_fileName(),
+                    mime='text/csv',disabled=message["df"].empty)
                 
-            if(dataViewModal.is_open()):
-                with dataViewModal.container():
-                    st.dataframe(message["df"])
-            col3.markdown("***Quick Data Overview:***")
-            col3.markdown(cache_describeSQLData(df_describe=message["df"].describe(), sql=message["sql"], prompt=message["prompt"]))
-        elif message["type"] =='figure-code':
-            col1, col2 = st.columns([3, 2], )
-            col1.markdown('Here is a figure for the data:')
-            if message['figtype']=='Plotly':
-                col1.plotly_chart(message["fig"],use_container_width=True)
-            elif   message['figtype']=='Altair':
-                col1.altair_chart(message["fig"],use_container_width=True)
-            elif  message['figtype']=='Bokeh':
-                col1.bokeh_chart(message["fig"],use_container_width=True)
+                dataViewModal = Modal(
+                        "Inspect Data", 
+                        key="viewdata-modal",
+                        
+                        # Optional
+                        padding=20,    # default value
+                        max_width=744  # default value,
+                    )
+                if(col2.button('Inspect Data :mag:',key=generate_uniqObjectName('btInspect-Data'),disabled=message["df"].empty  )):
+                    dataViewModal.open()
+                    
+                if(dataViewModal.is_open()):
+                    with dataViewModal.container():
+                        st.dataframe(message["df"])
+                col3.markdown("***Quick Data Overview:***")
+                col3.markdown(cache_describeSQLData(df_describe=message["df"].describe(), sql=message["sql"], prompt=message["prompt"]))
+            elif message["type"] =='figure-code':
+                col1, col2 = st.columns([3, 2], )
+                col1.markdown('Here is a figure for the data:')
+                if message['figtype']=='Plotly':
+                    col1.plotly_chart(message["fig"],use_container_width=True)
+                elif   message['figtype']=='Altair':
+                    col1.altair_chart(message["fig"],use_container_width=True)
+                elif  message['figtype']=='Bokeh':
+                    col1.bokeh_chart(message["fig"],use_container_width=True)
+                else:
+                    st.text(message["content"])
+                col2.markdown('Here is the code for the figure:')
+                col2.code(message["code"], language="python", line_numbers=True )
+            elif message["type"] =='figure':
+                if message['figtype']=='Plotly':
+                    col1.plotly_chart(message["fig"],use_container_width=True)
+                elif  message['figtype']=='Altair':
+                    col1.altair_chart(message["fig"],use_container_width=True)
+                elif message['figtype']=='Bokeh':
+                    col1.bokeh_chart(message["fig"],use_container_width=True)
+                else:
+                    st.text(message["content"])
+            elif  message["type"] =='error':
+                st.error(message["content"])
             else:
                 st.text(message["content"])
-            col2.markdown('Here is the code for the figure:')
-            col2.code(message["code"], language="python", line_numbers=True )
-        elif message["type"] =='figure':
-            if message['figtype']=='Plotly':
-                col1.plotly_chart(message["fig"],use_container_width=True)
-            elif  message['figtype']=='Altair':
-                col1.altair_chart(message["fig"],use_container_width=True)
-            elif message['figtype']=='Bokeh':
-                col1.bokeh_chart(message["fig"],use_container_width=True)
-            else:
-                st.text(message["content"])
-        elif  message["type"] =='error':
-            st.error(message["content"])
-        else:
-            st.text(message["content"])
-
+    except Exception as e:
+        vn.logError(e)
+        st.error(f"Error - Failed to render chat message:\n {e}")
 if st.session_state.get('show_sessionstate',True):  
     st.sidebar.write(st.session_state)
 
@@ -475,33 +480,36 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
         st.session_state["tempCode"] = vn.edit_plot_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df_metadata=df.dtypes,df=df,chart_instructions=st.session_state["figureInstructions"],chart_code=st.session_state["userUpdateCode"],plottingLib=st.session_state['plottingLib']  )
         st.session_state['figureInstructions'] = None
     vn.logInfo(f'Plot code generated {st.session_state["tempCode"]}')
+    plottingError =None
     if st.session_state.get("show_plotly_code", True):
         if st.session_state['plottingLib'] == 'Plotly':
-            st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
+            st.session_state["fig"], plottingError = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
         elif st.session_state['plottingLib'] =='Altair':
-            st.session_state["fig"] = vn.get_altair_figure(altair_code=st.session_state["tempCode"] , df=st.session_state["df"])
+            st.session_state["fig"], plottingError = vn.get_altair_figure(altair_code=st.session_state["tempCode"] , df=st.session_state["df"])
         elif st.session_state['plottingLib'] =='Bokeh':
-            st.session_state["fig"] = vn.get_bokeh_figure(bokeh_code=st.session_state["tempCode"] , df=st.session_state["df"])
+            st.session_state["fig"], plottingError = vn.get_bokeh_figure(bokeh_code=st.session_state["tempCode"] , df=st.session_state["df"])
         else:
-            st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
+            st.session_state["fig"], plottingError = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
 
         st.session_state.messages.append({"role": "assistant", "fig": st.session_state["fig"] ,'code':st.session_state["tempCode"], 'figtype': st.session_state['plottingLib'], "type":"figure-code" })
+        if plottingError is not None:
+            st.session_state.messages.append({"role": "assistant", "content": f"An error coccured when generating the figure above:\n {plottingError}" , 'type':'error' })
         st.rerun()
     elif st.session_state.get("show_chart", True):
         if st.session_state["fig"] is not None:
             if st.session_state['plottingLib'] == 'Plotly':
-                st.session_state["fig"] = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
+                st.session_state["fig"], plottingError = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
             elif st.session_state['plottingLib'] =='Altair':
-                st.session_state["fig"] = vn.get_altair_figure(altair_code=st.session_state["tempCode"] , df=st.session_state["df"])
+                st.session_state["fig"], plottingError = vn.get_altair_figure(altair_code=st.session_state["tempCode"] , df=st.session_state["df"])
             elif st.session_state['plottingLib'] =='Bokeh':
-                st.session_state["fig"] = vn.get_bokeh_figure(bokeh_code=st.session_state["tempCode"] , df=st.session_state["df"])
+                st.session_state["fig"], plottingError = vn.get_bokeh_figure(bokeh_code=st.session_state["tempCode"] , df=st.session_state["df"])
             else:
-                st.session_state["fig"] = vn.get_plot_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
+                st.session_state["fig"], plottingError = vn.get_plotly_figure(plotly_code=st.session_state["tempCode"] , df=st.session_state["df"])
 
             st.session_state.messages.append({"role": "assistant", "content": f"For your question: {st.session_state['prompt']} - I was able to generate this figure:"  , "type":"markdown"})
             st.session_state.messages.append({"role": "assistant", "content": st.session_state["fig"]  , 'figtype':st.session_state['plottingLib'], 'type':'figure' })
         else:
-            st.session_state.messages.append({"role": "assistant", "content":"I couldn't generate a chart" , 'type':'error' })
+            st.session_state.messages.append({"role": "assistant", "content": f"An error coccured when generating the figure above:\n {plottingError}" , 'type':'error' })
         st.rerun()
 elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None  and st.session_state["figureInstructions"] is None and st.session_state['enableUserTextInput'] == False:
     vn.logInfo('Confirming with user on next steps after generating Figure') 
