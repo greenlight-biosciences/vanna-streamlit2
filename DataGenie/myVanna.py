@@ -74,6 +74,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             system_msg += f"\n\nThe DataFrame was produced using this query: {sql}\n\n"
 
         system_msg += f"The following is information about the resulting pandas DataFrame 'df': \n{df_metadata}"
+        system_msg += "\n -Always ensure that the pandas DataFrame column names are matched EXACTLY when generating plot code"
         system_msg += "\n -NEVER include an fig.show() or show(fig) in your returns"
         system_msg += "\n -ALWAYS call the plotting figure or chart variable fig"
 
@@ -388,12 +389,17 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             plotly.graph_objs.Figure: The Plotly figure.
         """
         ldict = {"df": df, "px": px, "go": go}
+        fig = None
+        error = None
         try:
             exec(plotly_code, globals(), ldict)
 
             fig = ldict.get("fig", None)
+            if fig is None:
+                raise Exception('Failed to generate Figure')
         except Exception as e:
-            self.logger.error(e)
+            self.logError(e)
+            error =e
             # Inspect data types
             numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
             categorical_cols = df.select_dtypes(
@@ -421,7 +427,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         if dark_mode:
             fig.update_layout(template="plotly_dark")
 
-        return fig
+        return fig, error
     
     def get_altair_figure(self, altair_code: str, df: pd.DataFrame, dark_mode: bool = True):
         """
@@ -435,24 +441,23 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             alt.Chart: The Altair chart.
         """
         ldict = {"df": df, "alt": alt}
+        fig = None
+        error = None
         try:
             exec(altair_code, globals(), ldict)
             fig = ldict.get("fig", None)
             if fig is None:
                 fig = ldict.get("chart", None)
+                if fig is None:
+                    raise Exception('Failed to generate Figure')
         except Exception as e:
-            self.logger.error(e)
+            self.logError(e)
+            error = e
             fig = alt.Chart(df).mark_text().encode(
                 text=alt.Text(value='Error in creating the chart')
             )
 
-        # if chart is None:
-        #     return None
-
-        # if dark_mode:
-        #     fig = fig.configure(background='#3E3E3E').configure_view(stroke=None)
-
-        return fig
+        return fig, error
     
     def get_bokeh_figure(self, bokeh_code: str, df: pd.DataFrame, dark_mode: bool = True):
         """
@@ -466,26 +471,22 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             bokeh.plotting.figure.Figure: The Bokeh figure.
         """
         ldict = {"df": df, "figure": figure}
+        fig = None
+        error = None
         try:
             exec(bokeh_code, globals(), ldict)
             fig = ldict.get("fig", None)
             if fig is None:
                 fig = ldict.get("p", None)
-            else:
-                Exception('Failed to generate Figure')
+                if fig is None:
+                    raise Exception('Failed to generate Figure')
         except Exception as e:
-            self.logger.error(e)
+            self.logError(e)
+            error =e
             fig = figure(title="Error in creating the figure")
             fig.text(x=0, y=0, text=['Error'])
 
-        # if fig is None:
-        #     return None
-
-        # if dark_mode:
-        #     fig.background_fill_color = "#3E3E3E"
-        #     fig.border_fill_color = "#3E3E3E"
-
-        return fig
+        return fig, error
 
     def train(
         self,
