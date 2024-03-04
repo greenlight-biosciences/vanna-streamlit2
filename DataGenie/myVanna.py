@@ -74,7 +74,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             system_msg += f"\n\nThe DataFrame was produced using this query: {sql}\n\n"
 
         system_msg += f"The following is information about the resulting pandas DataFrame 'df': \n{df_metadata}"
-        system_msg += "\n -IMPORTANT: When referencing the pandas DataFrame, it is CRUCIAL to ensure that column names are matched EXACTLY when generating plot code. This is NON-NEGOTIABLE for accurate data visualization."
+        system_msg += "\n -IMPORTANT: When referencing the pandas DataFrame 'df', it is CRUCIAL to ensure that column names are matched EXACTLY when generating plot code. This is NON-NEGOTIABLE for accurate data visualization."
         system_msg += "\n -NEVER include an fig.show() or show(fig) in your returns"
         system_msg += "\n -ALWAYS call the plotting figure or chart variable fig"
 
@@ -83,7 +83,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             self.user_message(
             #f"Can you generate the Python {plottingLib} code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. If there is only one value in the dataframe, use an Indicator. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
 
-               f"Can you generate the Python {plottingLib} code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
+               f"Can you generate the Python {plottingLib} code to chart the results of the DataFrame 'df'? Assume the data is in a pandas dataframe called 'df' and each column name is UPPERCASED. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
             ),
         ]
         self.logInfo(message_log)
@@ -278,7 +278,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         ddl_list: list,
         doc_list: list,
         questionConversationHistory: list,
-        questionMemoryLen: int = 2,
+        questionMemoryLen: int = 5,
         **kwargs,
     ):
         initial_prompt = "The user provides a question and you provide SQL code to run on Snowflake database. You will only respond with SQL code and not with any explanations.\n\nRespond with ONLY with SQL code, you may respond using a 'SELECT' or 'WITH' for complex queries, ending you responses at ';'. In the SQL code, do your best to provide nicely named columns along additional metadata columns to answer the question. Do not answer with any explanations -- just the sql code from 'SELECT' or 'WITH' to the ';'.\n"
@@ -302,10 +302,11 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                     message_log.append(OpenAI_Chat.assistant_message(example["sql"]))
 
         message_log.append({"role": "user", "content": question})
-        msgHistory = questionMemoryLen*-1
+        msgHistoryLimit = questionMemoryLen
 
-        if(questionMemoryLen < len(questionConversationHistory)):
-            for message in questionConversationHistory[msgHistory:]:
+        if questionConversationHistory:
+            startIndex = -msgHistoryLimit if len(questionConversationHistory) > msgHistoryLimit else -len(questionConversationHistory)
+            for message in questionConversationHistory[startIndex:]:
                 if message["type"] =='markdown':
                     message_log.append({"role": message['role'], "content":message["content"]})
                 elif message["type"] =='code':
@@ -329,7 +330,6 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                     message_log.append({"role": message['role'], "content":message["content"]})
                 else:
                     message_log.append({"role": message['role'], "content":message["content"]})
-
         self.logInfo(message_log)
         return message_log
     
@@ -362,6 +362,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             ddl_list=ddl_list,
             doc_list=doc_list,
             questionConversationHistory=questionConversationHistory,
+            questionMemoryLen = os.getenv("QUESTIONMEMORYLEN",10),
             **kwargs,
         )
         llm_response = self.submit_prompt(prompt, **kwargs)
@@ -718,3 +719,5 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         self.logInfo(plan)
         self.train(plan=plan,schema=schema)
+    
+    # def summarize_prompt(): 
