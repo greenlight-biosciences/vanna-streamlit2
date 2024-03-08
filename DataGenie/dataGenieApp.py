@@ -229,6 +229,7 @@ vnModelValue=st.sidebar.selectbox('Data Mart',options=os.environ.get('ALLOWEDSCH
                                                 #args=(st.session_state['vnModel'],), 
                                                 key='vnModel',
                                                         disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
+st.sidebar.markdown( f"### User question:\n{st.session_state['prompt']}")
 vn.logInfo(f"Confirming Schema Changed to: {vnModelValue}")
 
 
@@ -260,7 +261,9 @@ st.session_state['sqlQ']= tab2.text_area('Enter Question:', value='', height=Non
 st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=None, max_chars=None, key='sqlA_input',disabled=st.session_state['enableTraining'])
 tab2.button('Submit Q&A',key='submit_Q&A', on_click=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
 tab2.markdown("***")
-
+uploaded_file = tab2.file_uploader("Choose a CSV file", type="csv")
+if uploaded_file is not None:
+    process_file(uploaded_file)
 
 @st.cache_data
 def cache_describeSQLData(prompt: str = None, sql:str =None, additionalInstructions:str =None, df_describe:str =None):
@@ -355,7 +358,7 @@ for message in st.session_state.messages:
 if st.session_state.get('show_sessionstate',True):  
     st.sidebar.write(st.session_state)
 
-if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHelp']), disabled= not st.session_state['enableUserTextInput'] ) :
+if userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHelp']), disabled= not st.session_state['enableUserTextInput'] ) :
 
     vn.logInfo(f'Working with user input:{userResponse}')
    
@@ -369,6 +372,8 @@ if   userResponse :=  st.chat_input( optionSelector(st.session_state['textInputH
     elif(st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None):
         st.session_state['enableUserTextInput']=False
         st.session_state.messages.append({"role": "user", "content": userResponse,  'type':'markdown'   })
+        st.session_state['prompt']=vn.summarizePrompt(st.session_state['prompt'],questionConversationHistory= st.session_state['messages'])
+        st.toast(f":sparkles: Your overall question has been updated, see side bar : {st.session_state['prompt']}" )
         st.rerun()
     elif(st.session_state['figureInstructions'] is None and st.session_state["tempCode"] is not None):
         st.session_state['figureInstructions'] =userResponse

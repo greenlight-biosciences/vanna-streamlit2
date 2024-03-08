@@ -2,6 +2,7 @@
 from typing import Union, List, Union
 from vanna import get_models, set_model
 from vanna.openai.openai_chat import OpenAI_Chat
+from vanna.openai.openai_embeddings import OpenAI_Embeddings
 from chromasdb_vector import ChromaDB_VectorStore
 import snowflake.connector
 import pandas as pd
@@ -16,11 +17,12 @@ from bokeh.plotting import figure
 from vanna.__init__ import TrainingPlan, TrainingPlanItem
 import logging
 import streamlit as st
+from utility import returnMsgFrmtForOAI
 
 class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
     def __init__(self, config=None):
-        ChromaDB_VectorStore.__init__(self, config=config)
         OpenAI_Chat.__init__(self, config=config)
+        ChromaDB_VectorStore.__init__(self, config=config)
         self.setup_logger()
         #VannaBase.__init__(self, config=config)
 
@@ -301,35 +303,12 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                     message_log.append(OpenAI_Chat.user_message(example["question"]))
                     message_log.append(OpenAI_Chat.assistant_message(example["sql"]))
 
-        message_log.append({"role": "user", "content": question})
         msgHistoryLimit = questionMemoryLen
 
         if questionConversationHistory:
             startIndex = -msgHistoryLimit if len(questionConversationHistory) > msgHistoryLimit else -len(questionConversationHistory)
             for message in questionConversationHistory[startIndex:]:
-                if message["type"] =='markdown':
-                    message_log.append({"role": message['role'], "content":message["content"]})
-                elif message["type"] =='code':
-                    message_log.append({"role": message['role'], "content":message["content"]})
-                elif message["type"] =='sql':
-                    message_log.append({"role": message['role'], "content":message["sql"]})
-                elif message["type"] =='dataframe':
-                    message_log.append({"role": message['role'], "content":message["df"].head(int(message["nrows"])).to_string()})
-                elif message["type"] =='sql-dataframe':
-                    message_log.append({"role": message['role'], "content":'Here is a the generated SQL query for your question:'})
-                    message_log.append({"role": message['role'], "content":message["sql"]})
-                    message_log.append({"role": message['role'], "content":'Data Preview (first 5 rows):'})
-                    message_log.append({"role": message['role'], "content":message["df"].head(int(message["nrows"])).to_string()})
-                elif message["type"] =='figure-code':
-                    message_log.append({"role": message['role'], "content":'Here is a figure for the data: <img>'})
-                    message_log.append({"role": message['role'], "content":'Here is the code for the figure:'})
-                    message_log.append({"role": message['role'], "content":message["code"]})
-                elif message["type"] =='figure':
-                    message_log.append({"role": message['role'], "content":'<img>'})
-                elif  message["type"] =='error':
-                    message_log.append({"role": message['role'], "content":message["content"]})
-                else:
-                    message_log.append({"role": message['role'], "content":message["content"]})
+                message_log = returnMsgFrmtForOAI(message=message,message_log=message_log)
         self.logInfo(message_log)
         return message_log
     
@@ -362,7 +341,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             ddl_list=ddl_list,
             doc_list=doc_list,
             questionConversationHistory=questionConversationHistory,
-            questionMemoryLen = os.getenv("QUESTIONMEMORYLEN",10),
+            questionMemoryLen = int(os.getenv("QUESTIONMEMORYLEN",10)),
             **kwargs,
         )
         llm_response = self.submit_prompt(prompt, **kwargs)
@@ -720,4 +699,41 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         self.logInfo(plan)
         self.train(plan=plan,schema=schema)
     
-    # def summarize_prompt(): 
+    def summarizePrompt(
+        self, question: str = None, questionConversationHistory:list = None, additionalInstructions:str=None,questionMemoryLen:int=10, **kwargs ) -> str:
+        # if question is not None:
+        #     # if additionalInstructions is not None:
+        #     #     question = ( "Master Question: " + question   + ", also follow these additional intructions "   + additionalInstructions  +"\n")
+        #     # else:
+        #     #     question = ( "Master Question: " + question )
+
+        
+        system_msg ="- Your task is to precisely REPHRASE the user's Master question to focus on DATA EXTRACTION from the DATA WAREHOUSE, integrating the latest instructions from the conversation."
+        system_msg +="Ensure the rephrased question maintains the essence of the Master query but is explicitly directed towards obtaining specific data or insights from the data warehouse."
+        system_msg +="Incorporate all relevant updates, such as schema filters, query adjustments, or particular data extraction requests, ensuring these modifications align with the goal of data retrieval from the data warehouse."
+        system_msg +="AVOID adding extraneous explanations or diverging from the data extraction focus. Your refinement should directly support the user's intent to extract data, using clear, concise, and relevant language."
+        system_msg +="The updated question should not only reflect the conversation's evolution but also emphasize the user's objective of data extraction, ensuring clarity in the request for specific information or analysis from the data warehouse."
+        system_msg += f"-> THIS is the Master Question which needs to be updated: {question}"
+        
+        message_log = [
+            self.system_message(system_msg)           
+        ]
+
+        msgHistoryLimit = questionMemoryLen
+        #userMessagesHistory = questionConversationHistory
+
+        if questionConversationHistory:
+            startIndex = -msgHistoryLimit if len(questionConversationHistory) > msgHistoryLimit else -len(questionConversationHistory)
+            self.logInfo(questionConversationHistory[startIndex:])
+            # user_messages = [item for item in questionConversationHistory if item['role'] == 'user']
+            for message in questionConversationHistory[startIndex:]:
+                self.logInfo(message)
+                message_log = returnMsgFrmtForOAI(message=message,message_log=message_log)
+        
+        message_log.append(self.user_message(
+               f"Please re-summarize my Master Question based on the preceeding conversation."))
+        
+        self.logInfo(message_log)
+        #self.logDebug(message_log)
+        summerizedQuestion = self.submit_prompt(message_log, kwargs=kwargs)
+        return summerizedQuestion

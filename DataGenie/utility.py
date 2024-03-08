@@ -21,3 +21,29 @@ def optionSelector(option):
         return 'Ask me a question about your data...'
     else:
         return dict[option]
+
+def returnMsgFrmtForOAI(message:dict=None, message_log:list=None):
+    if message["type"] =='markdown':
+        message_log.append({"role": message['role'], "content":message["content"]})
+    elif message["type"] =='code':
+        message_log.append({"role": message['role'], "content":message["content"]})
+    elif message["type"] =='sql':
+        message_log.append({"role": message['role'], "content":message["sql"]})
+    elif message["type"] =='dataframe':
+        message_log.append({"role": message['role'], "content":message["df"].head(int(message["nrows"])).to_string()})
+    elif message["type"] =='sql-dataframe':
+        message_log.append({"role": message['role'], "content":'Here is a the generated SQL query for your question:'})
+        message_log.append({"role": message['role'], "content":message["sql"]})
+        message_log.append({"role": message['role'], "content":'Data Preview (first 5 rows):'})
+        message_log.append({"role": message['role'], "content":message["df"].head(int(message["nrows"])).to_string()})
+    elif message["type"] =='figure-code':
+        message_log.append({"role": message['role'], "content":'Here is a figure for the data: <img>'})
+        message_log.append({"role": message['role'], "content":'Here is the code for the figure:'})
+        message_log.append({"role": message['role'], "content":message["code"]})
+    elif message["type"] =='figure':
+        message_log.append({"role": message['role'], "content":'<img>'})
+    elif  message["type"] =='error':
+        message_log.append({"role": message['role'], "content":message["content"]})
+    else:
+        message_log.append({"role": message['role'], "content":message["content"]})
+    return message_log
