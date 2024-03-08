@@ -215,6 +215,40 @@ st.sidebar.title("Output Settings")
 def changeSchemaCallback():
     vn.logInfo(f"Schema Changed to: {st.session_state['vnModel']}")
 
+
+def process_file(uploaded_file):
+    # Read the file with pandas
+    data = pd.read_csv(uploaded_file)
+    # Initialize progress bar
+    progress_bar = st.progress(0)
+    total_rows = len(data)
+    processed_count = 0  # To keep track of the number of processed rows
+
+    for index, row in data.iterrows():
+        # Update the progress bar
+        progress_bar.progress(index / total_rows)
+        if row['Select']:  # Only process selected rows
+            # Check for empty content
+            if pd.notna(row['content']):
+                if row['training_data_type'].lower() == 'sql':
+                    # Process SQL question-answer pair
+                    vn.trainVN(input = row['content'], question=row['question'], type ='sql' , schema= st.session_state['vnModel'] )
+                elif row['training_data_type'].lower() == 'doc':
+                    # Process documentation
+                    vn.trainVN(input =['content'], type ='doc', schema= st.session_state['vnModel'])
+                elif row['training_data_type'].lower() == 'ddl':
+                    # Process DDL
+                    vn.trainVN(input =row['content'], type ='ddl', schema= st.session_state['vnModel'])
+                processed_count += 1
+            else:
+                st.warning(f"Row {index} has empty content and will be skipped.")
+        else:
+            st.info(f"Row {index} not selected for processing.")
+    
+    # Finalize the progress bar
+    progress_bar.progress(100)
+    st.success(f'Processed {processed_count} out of {total_rows} rows.')
+
 st.sidebar.checkbox("Show SQL", value=True, key="show_sql", disabled=True)
 st.sidebar.checkbox("Show Table", value=True, key="show_table", disabled=True)
 st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code", disabled=True)
@@ -261,7 +295,7 @@ st.session_state['sqlQ']= tab2.text_area('Enter Question:', value='', height=Non
 st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=None, max_chars=None, key='sqlA_input',disabled=st.session_state['enableTraining'])
 tab2.button('Submit Q&A',key='submit_Q&A', on_click=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
 tab2.markdown("***")
-uploaded_file = tab2.file_uploader("Choose a CSV file", type="csv")
+uploaded_file = tab2.file_uploader("Traing From Backup File - Choose a CSV file", type="csv")
 if uploaded_file is not None:
     process_file(uploaded_file)
 
