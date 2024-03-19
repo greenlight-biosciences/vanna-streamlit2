@@ -60,7 +60,7 @@ if "messages" not in st.session_state:
     st.session_state.UserID= None
     st.session_state.cutoff= config['default_cutoff']
     st.session_state.myVannaClass= MyVanna( config= config )
-    st.session_state.myVannaClass.connect_to_snowflake(
+    st.session_state.myVannaClass.snow.setConnection(
         account=os.environ.get('ACCOUNT'),
         username=os.environ.get('SNOWFLAKE_USER'),
         password=os.environ.get('SNOWFLAKE_PASS'),
@@ -221,15 +221,7 @@ def generate_uniqObjectName(object:str='obj'):
 st.sidebar.title("Output Settings")
 
 def changeSchemaCallback():
-    vn.connect_to_snowflake(
-        account=os.environ.get('ACCOUNT'),
-        username=os.environ.get('SNOWFLAKE_USER'),
-        password=os.environ.get('SNOWFLAKE_PASS'),
-        database=os.environ.get('SNOWFLAKE_DATABASE'),
-        role=os.environ.get('ROLE'),
-        schema=st.session_state['vnModel'],
-        warehouse=os.environ.get('WAREHOUSE')
-    )
+    vn.snow.set_schema(schema=st.session_state['vnModel'])
     vn.vannaLogger.logInfo(f"Schema Changed to: {st.session_state['vnModel']}")
 
 def changeCutoffCallback():
@@ -418,6 +410,7 @@ if userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHel
         st.session_state.messages.append({"role": "user", "content": userResponse,  'type':'markdown'   })
         st.session_state['prompt']=vn.summarizePrompt(st.session_state['prompt'],questionConversationHistory= st.session_state['messages'])
         st.toast(f":sparkles: Your overall question has been updated, see side bar : {st.session_state['prompt']}" )
+        vn.vannaLogger.logInfo(f"Your overall question has been updated, see side bar : {st.session_state['prompt']}")
         st.rerun()
     elif(st.session_state['figureInstructions'] is None and st.session_state["tempCode"] is not None):
         st.session_state['figureInstructions'] =userResponse
@@ -428,7 +421,7 @@ if userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHel
         st.rerun()
 elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None and st.session_state['enableUserTextInput']==False:   
     vn.vannaLogger.logInfo('Generating SQL for user prompt') 
-
+    
     st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'], schema=st.session_state['vnModel'])
 
     if detect_sql_statement_at_line_start(st.session_state['tempSQL']) == False:
@@ -437,6 +430,7 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
         st.session_state['enableUserTextInput']=True
         st.session_state['prompt']=None
         st.session_state['tempSQL']=None
+        vn.vannaLogger.logInfo('Detected no SQL in responses from LLM - asking user to resubmit a question') 
         st.rerun()
     else:
         try:

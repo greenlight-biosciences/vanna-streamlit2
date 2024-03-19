@@ -1,9 +1,9 @@
 
-from typing import Union, List, Union
-from vanna import get_models, set_model
+from typing import Union, List
+# from vanna import get_models, set_model
 from vanna.openai.openai_chat import OpenAI_Chat
-from chromasdb_vector import ChromaDB_VectorStore
-import snowflake.connector
+# from chromasdb_vector import ChromaDB_VectorStore
+# import snowflake.connector
 import pandas as pd
 from vanna.exceptions import DependencyError, ImproperlyConfigured, ValidationError
 import os
@@ -14,18 +14,28 @@ import plotly.graph_objects as go
 import altair as alt
 from bokeh.plotting import figure
 from vanna.__init__ import TrainingPlan, TrainingPlanItem
-import streamlit as st
+# import streamlit as st
 from utility import returnMsgFrmtForOAI
 from cosmosVectorStore import AzureCosmosMongovCoreDB
 from VannaLogger import VannaLogger
+from SnowflakeConnection import SnowflakeConnection
 class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
     def __init__(self, config=None):
         # ChromaDB_VectorStore.__init__(self, config=config)
         AzureCosmosMongovCoreDB.__init__(self, config=config)
         OpenAI_Chat.__init__(self, config=config)
         self.vannaLogger = VannaLogger()
-        # self.set_embedding_fuc(self.AzureOpenAI_Embedding.generate_embeddings)
-        #VannaBase.__init__(self, config=config)
+        self.snow = SnowflakeConnection()
+        self.run_sql_is_set = True
+        
+    def run_sql(self,sql:str):
+        with self.snow as conn:
+            cur = conn.cursor()
+            try:
+                cur.execute(sql)
+                return cur.fetchall()
+            finally:
+                cur.close()
 
 
     def _sanitize_plot_code(self, raw_plot_code: str) -> str:
@@ -161,95 +171,93 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
         return sqlDataDesc
     
     # @st.cache_resource
-    def connect_to_snowflake(
-        self,
-        account: str,
-        username: str,
-        password: str,
-        database: str,
-        schema: str,
-        role: Union[str, None] = None,
-        warehouse: Union[str, None] = None,
-    ):
-        try:
-            snowflake = __import__("snowflake.connector")
-        except ImportError:
-            raise DependencyError(
-                "You need to install required dependencies to execute this method, run command:"
-                " \npip install vanna[snowflake]"
-            )
+    # def connect_to_snowflake(
+    #     self,
+    #     account: str,
+    #     username: str,
+    #     password: str,
+    #     database: str,
+    #     schema: str,
+    #     role: Union[str, None] = None,
+    #     warehouse: Union[str, None] = None,
+    # ):
+    #     try:
+    #         snowflake = __import__("snowflake.connector")
+    #     except ImportError:
+    #         raise DependencyError(
+    #             "You need to install required dependencies to execute this method, run command:"
+    #             " \npip install vanna[snowflake]"
+    #         )
 
-        if username == "my-username":
-            username_env = os.getenv("SNOWFLAKE_USERNAME")
+    #     if username == "my-username":
+    #         username_env = os.environ.get("SNOWFLAKE_USERNAME")
 
-            if username_env is not None:
-                username = username_env
-            else:
-                raise ImproperlyConfigured("Please set your Snowflake username.")
+    #         if username_env is not None:
+    #             username = username_env
+    #         else:
+    #             raise ImproperlyConfigured("Please set your Snowflake username.")
 
-        if password == "my-password":
-            password_env = os.getenv("SNOWFLAKE_PASSWORD")
+    #     if password == "my-password":
+    #         password_env = os.environ.get("SNOWFLAKE_PASSWORD")
 
-            if password_env is not None:
-                password = password_env
-            else:
-                raise ImproperlyConfigured("Please set your Snowflake password.")
+    #         if password_env is not None:
+    #             password = password_env
+    #         else:
+    #             raise ImproperlyConfigured("Please set your Snowflake password.")
 
-        if account == "my-account":
-            account_env = os.getenv("SNOWFLAKE_ACCOUNT")
+    #     if account == "my-account":
+    #         account_env = os.environ.get("SNOWFLAKE_ACCOUNT")
 
-            if account_env is not None:
-                account = account_env
-            else:
-                raise ImproperlyConfigured("Please set your Snowflake account.")
+    #         if account_env is not None:
+    #             account = account_env
+    #         else:
+    #             raise ImproperlyConfigured("Please set your Snowflake account.")
 
-        if database == "my-database":
-            database_env = os.getenv("SNOWFLAKE_DATABASE")
+    #     if database == "my-database":
+    #         database_env = os.environ.get("SNOWFLAKE_DATABASE")
 
-            if database_env is not None:
-                database = database_env
-            else:
-                raise ImproperlyConfigured("Please set your Snowflake database.")
+    #         if database_env is not None:
+    #             database = database_env
+    #         else:
+    #             raise ImproperlyConfigured("Please set your Snowflake database.")
 
-        conn = snowflake.connector.connect(
-            user=username,
-            password=password,
-            account=account,
-            database=database,
-            schema=schema,
-            role=role,
-            warehouse=warehouse
-        )
+    #     conn = snowflake.connector.connect(
+    #         user=username,
+    #         password=password,
+    #         account=account,
+    #         database=database,
+    #         schema=schema,
+    #         role=role,
+    #         warehouse=warehouse
+    #     )
 
-        def run_sql_snowflake(sql: str) -> pd.DataFrame:
-            cs = conn.cursor()
+    # def run_sql_snowflake(sql: str) -> pd.DataFrame:
+    #     cs = conn.cursor()
 
-            if role is not None:
-                roleSQL = f"USE ROLE {role}"
-                cs.execute(roleSQL)
+    #     if role is not None:
+    #         roleSQL = f"USE ROLE {role}"
+    #         cs.execute(roleSQL)
 
-            if warehouse is not None:
-                warehouseSQL= f"USE WAREHOUSE {warehouse}"
-                cs.execute(warehouseSQL)
-            
-            dbuseSQL= f"USE DATABASE {database}"
-            cs.execute(dbuseSQL)
+    #     if warehouse is not None:
+    #         warehouseSQL= f"USE WAREHOUSE {warehouse}"
+    #         cs.execute(warehouseSQL)
+        
+    #     dbuseSQL= f"USE DATABASE {database}"
+    #     cs.execute(dbuseSQL)
 
-            dbuseschema= f"USE SCHEMA {schema}"
-            cs.execute(dbuseschema)
-            
-            cur = cs.execute(sql)
+    #     dbuseschema= f"USE SCHEMA {schema}"
+    #     cs.execute(dbuseschema)
+        
+    #     cur = cs.execute(sql)
 
-            results = cur.fetchall()
+    #     results = cur.fetchall()
 
-            # Create a pandas dataframe from the results
-            df = pd.DataFrame(results, columns=[desc[0] for desc in cur.description])
+    #     # Create a pandas dataframe from the results
+    #     df = pd.DataFrame(results, columns=[desc[0] for desc in cur.description])
 
-            return df
+    #     return df
 
-        self.run_sql = run_sql_snowflake
-        self.run_sql_is_set = True
-    
+
     def get_sql_prompt(
         self,
         question: str,
@@ -321,7 +329,7 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
             ddl_list=ddl_list,
             doc_list=doc_list,
             questionConversationHistory=questionConversationHistory,
-            questionMemoryLen = int(os.getenv("QUESTIONMEMORYLEN",10)),
+            questionMemoryLen = int(os.environ.get("QUESTIONMEMORYLEN",10)),
             **kwargs,
         )
         llm_response = self.submit_prompt(prompt, **kwargs)
@@ -687,33 +695,35 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
         #     # else:
         #     #     question = ( "Master Question: " + question )
 
-        
-        system_msg ="- Your task is to precisely REPHRASE the user's Master question to focus on DATA EXTRACTION from the DATA WAREHOUSE, integrating the latest instructions from the conversation."
-        system_msg +="Ensure the rephrased question maintains the essence of the Master query but is explicitly directed towards obtaining specific data or insights from the data warehouse."
-        system_msg +="Incorporate all relevant updates, such as schema filters, query adjustments, or particular data extraction requests, ensuring these modifications align with the goal of data retrieval from the data warehouse."
-        system_msg +="AVOID adding extraneous explanations or diverging from the data extraction focus. Your refinement should directly support the user's intent to extract data, using clear, concise, and relevant language."
-        system_msg +="The updated question should not only reflect the conversation's evolution but also emphasize the user's objective of data extraction, ensuring clarity in the request for specific information or analysis from the data warehouse."
-        system_msg += f"-> THIS is the Master Question which needs to be updated: {question}"
-        
-        message_log = [
-            self.system_message(system_msg)           
-        ]
+        try:
+            system_msg ="- Your task is to precisely REPHRASE the user's Master question to focus on DATA EXTRACTION from the DATA WAREHOUSE, integrating the latest instructions from the conversation."
+            system_msg +="Ensure the rephrased question maintains the essence of the Master query but is explicitly directed towards obtaining specific data or insights from the data warehouse."
+            system_msg +="Incorporate all relevant updates, such as schema filters, query adjustments, or particular data extraction requests, ensuring these modifications align with the goal of data retrieval from the data warehouse."
+            system_msg +="AVOID adding extraneous explanations or diverging from the data extraction focus. Your refinement should directly support the user's intent to extract data, using clear, concise, and relevant language."
+            system_msg +="The updated question should not only reflect the conversation's evolution but also emphasize the user's objective of data extraction, ensuring clarity in the request for specific information or analysis from the data warehouse."
+            system_msg += f"-> THIS is the Master Question which needs to be updated: {question}"
+            
+            message_log = [
+                self.system_message(system_msg)           
+            ]
 
-        msgHistoryLimit = questionMemoryLen
-        #userMessagesHistory = questionConversationHistory
+            msgHistoryLimit = questionMemoryLen
 
-        if questionConversationHistory:
-            startIndex = -msgHistoryLimit if len(questionConversationHistory) > msgHistoryLimit else -len(questionConversationHistory)
-            self.vannaLogger.logInfo(questionConversationHistory[startIndex:])
-            # user_messages = [item for item in questionConversationHistory if item['role'] == 'user']
-            for message in questionConversationHistory[startIndex:]:
-                self.vannaLogger.logInfo(message)
-                message_log = returnMsgFrmtForOAI(message=message,message_log=message_log)
-        
-        message_log.append(self.user_message(
-               f"Please re-summarize my Master Question based on the preceeding conversation."))
-        
-        self.vannaLogger.logInfo(message_log)
-        #self.vannaLogger.logDebug(message_log)
-        summerizedQuestion = self.submit_prompt(message_log, kwargs=kwargs)
-        return summerizedQuestion
+            if questionConversationHistory:
+                startIndex = -msgHistoryLimit if len(questionConversationHistory) > msgHistoryLimit else -len(questionConversationHistory)
+                self.vannaLogger.logInfo(questionConversationHistory[startIndex:])
+
+                for message in questionConversationHistory[startIndex:]:
+                    self.vannaLogger.logInfo(message)
+                    message_log = returnMsgFrmtForOAI(message=message,message_log=message_log)
+            
+            message_log.append(self.user_message(
+                f"Please re-summarize my Master Question based on the preceeding conversation."))
+            
+            self.vannaLogger.logInfo(message_log)
+            #self.vannaLogger.logDebug(message_log)
+            summerizedQuestion = self.submit_prompt(message_log, kwargs=kwargs)
+            return summerizedQuestion
+        except Exception as e:
+            self.vannaLogger.logError(str(e))
+            return question  
