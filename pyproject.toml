@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.9.7 || >3.9.7,<4.0"
-streamlit = "^1.31.0"
+streamlit = "^1.29.0"
 python-dotenv = "^1.0.0"
 kaleido = "0.2.1"
 vanna = {extras = ["chromadb","openai"], version = "^0.0.30"}
@@ -18,7 +18,7 @@ altair = "^4.0.0"
 snowflake-connector-python = "^3.6.0"
 ipython="^8.13.0"
 streamlit_modal="^0.1.1"
-flask="^3.0.2"
+pymongo="^4.6.2"
 [tool.poetry.group.dev.dependencies]
 black = "^23.9.1"
 

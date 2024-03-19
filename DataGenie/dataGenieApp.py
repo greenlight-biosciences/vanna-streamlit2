@@ -10,32 +10,25 @@ from dotenv import load_dotenv
 from streamlit_modal import Modal
 from streamlit.web.server.websocket_headers import _get_websocket_headers
 
-
-vn= MyVanna(
-    config={	
+config = {	
         'api_type': 'azure',
         'api_base': os.environ.get("AZURE_OPENAI_ENDPOINT"),
-	    'api_version': '2023-05-15',
+	    'api_version': '2023-07-01-preview',
 	    #'engine': os.environ.get("AZUREOPENAIENGINE"),
         'model': os.environ.get("AZUREOPENAIENGINE"),
 	    'api_key': os.environ.get("AZUREOPENAIKEY"),
         'authtype': os.environ.get("CHROMASDBAUTHTYPE"),
-        'path':os.environ.get("FILE_SHARE_PATH","."),
-})
+        'cosmos_mongo_user': os.environ.get("COSMOS_MONGO_USER"), 
+        'cosmos_mongo_pass': os.environ.get("COSMOS_MONGO_PWD"), 
+        'cosmos_mongo_server': os.environ.get("COSMOS_MONGO_SERVER"),
+        'cosmos_mongo_db_name': os.environ.get("COSMOS_MONGO_DB_NAME") ,
+        'default_cutoff': float(os.environ.get("DEFAULT_CUTOFF", 0.75)) }
 
 appTitle = os.environ.get("APPTITLE")
 menu_items ={"Get help":os.environ.get("GETHELPURL"), "Report a Bug":os.environ.get("SUBMITTICKETURL") }
 st.set_page_config(layout="wide", page_title =appTitle, menu_items =menu_items )
 st.title(appTitle)
 
-
-def getUserID(): 
-    headers = _get_websocket_headers()
-    user_email ='testuser@greenlightbio.com'
-    if "X-Ms-Client-Principal-Name" in headers:
-        user_email = headers["X-Ms-Client-Principal-Name"]
-        vn.logInfo(f'Logged in user: {user_email}')
-    return user_email.split('@')[0]
 
 # Initialize app state variables
 if "messages" not in st.session_state:
@@ -65,7 +58,28 @@ if "messages" not in st.session_state:
     st.session_state.sqlRadioInput = None
     st.session_state.enablePlottingDataModelChange = True
     st.session_state.UserID= None
+    st.session_state.cutoff= config['default_cutoff']
+    st.session_state.myVannaClass= MyVanna( config= config )
+    st.session_state.myVannaClass.connect_to_snowflake(
+        account=os.environ.get('ACCOUNT'),
+        username=os.environ.get('SNOWFLAKE_USER'),
+        password=os.environ.get('SNOWFLAKE_PASS'),
+        database=os.environ.get('SNOWFLAKE_DATABASE'),
+        role=os.environ.get('ROLE'),
+        schema=st.session_state['vnModel'],
+        warehouse=os.environ.get('WAREHOUSE')
+    )
     userResponse = None
+
+vn= st.session_state.myVannaClass
+
+def getUserID(): 
+    headers = _get_websocket_headers()
+    user_email ='testuser@greenlightbio.com'
+    if "X-Ms-Client-Principal-Name" in headers:
+        user_email = headers["X-Ms-Client-Principal-Name"]
+        vn.vannaLogger.logInfo(f'Logged in user: {user_email}')
+    return user_email.split('@')[0]
 
 st.session_state['UserID'] = getUserID()
 st.markdown( f"##### Welcome : {st.session_state['UserID']}")
@@ -90,6 +104,7 @@ def resetPrompt():
     st.session_state['userUpdateSQL'] =None
     st.session_state['textInputHelp'] =None
     st.session_state['enablePlottingDataModelChange'] =True
+    # st.session_state['cutoff'] = 0.75
     userResponse = None
     st.rerun()
 
@@ -116,10 +131,11 @@ def reRunClearApp():
     st.session_state['uniqWidgetCounter'] =0
     st.session_state['sqlRadioInput'] =None
     st.session_state['enablePlottingDataModelChange'] =True
+    st.session_state['cutoff'] = 0.75
     userResponse = None
 
 def trainQuestionAnswer(sqlQ=None,sqlA=None):
-    vn.logInfo('running trainQuestionAnswer traning')
+    vn.vannaLogger.logInfo('running trainQuestionAnswer traning')
 
     if(sqlA and sqlQ):
         returnVal= vn.trainVN(input = sqlA, question=sqlQ, type ='sql' , schema= st.session_state['vnModel'] )
@@ -135,7 +151,7 @@ def trainQuestionAnswer(sqlQ=None,sqlA=None):
 
 
 def trainDoc(doc):
-    vn.logInfo('running doc traning')
+    vn.vannaLogger.logInfo('running doc traning')
     if (doc):
         returnVal = vn.trainVN(input =doc, type ='doc', schema= st.session_state['vnModel'])
         if returnVal:
@@ -148,7 +164,7 @@ def trainDoc(doc):
 
 
 def trainDDL(ddl):
-    vn.logInfo('running ddl traning')
+    vn.vannaLogger.logInfo('running ddl traning')
 
     if (ddl):
         returnVal = vn.trainVN(input =ddl, type ='ddl', schema= st.session_state['vnModel'])
@@ -172,9 +188,13 @@ def deleteTraining():
     # Iterate over selected IDs and remove training data
     for id_value in selected_values:
         try:
-            vn.remove_training_data(id_value)
+            returnBool = vn.remove_training_data(id_value)
+            if returnBool:
+                     st.toast(f'Successfully Deleted Training Data for id: {id_value}')
+            else:
+                st.toast(f'Training Data Not Deleted for id: {id_value}')
         except Exception as e:
-            vn.logError(f"Error removing training data for id {id_value}: {e}")
+            vn.vannaLogger.logError(f"Error removing training data for id {id_value}: {e}")
 
 @st.cache_data 
 def convert_df(df):
@@ -197,24 +217,23 @@ def generate_uniqObjectName(object:str='obj'):
     # Use the formatted time string in the filename
     return f'{current_time}-{object}-{st.session_state["uniqWidgetCounter"]}'
 
-# @st.cache_resource
-    # vn.connect_to_snowflake(
-    #     account=os.environ.get('ACCOUNT'),
-    #     username=os.environ.get('SNOWFLAKE_USER'),
-    #     password=os.environ.get('SNOWFLAKE_PASS'),
-    #     database=os.environ.get('SNOWFLAKE_DATABASE'),
-    #     role=os.environ.get('ROLE'),
-    #     schema=model,
-    #     warehouse=os.environ.get('WAREHOUSE'))
-    
-
-
 
 st.sidebar.title("Output Settings")
 
 def changeSchemaCallback():
-    vn.logInfo(f"Schema Changed to: {st.session_state['vnModel']}")
+    vn.connect_to_snowflake(
+        account=os.environ.get('ACCOUNT'),
+        username=os.environ.get('SNOWFLAKE_USER'),
+        password=os.environ.get('SNOWFLAKE_PASS'),
+        database=os.environ.get('SNOWFLAKE_DATABASE'),
+        role=os.environ.get('ROLE'),
+        schema=st.session_state['vnModel'],
+        warehouse=os.environ.get('WAREHOUSE')
+    )
+    vn.vannaLogger.logInfo(f"Schema Changed to: {st.session_state['vnModel']}")
 
+def changeCutoffCallback():
+    vn.update_cutoff(st.session_state['cutoff'])
 
 def process_file(uploaded_file):
     # Read the file with pandas
@@ -263,19 +282,10 @@ vnModelValue=st.sidebar.selectbox('Data Mart',options=os.environ.get('ALLOWEDSCH
                                                 #args=(st.session_state['vnModel'],), 
                                                 key='vnModel',
                                                         disabled= not st.session_state['enablePlottingDataModelChange'], help='Change which Data Mart the chat app is talking to (Note: Changing the Data Mart is only allowed at the start of a new conversation)')
+cutoffVal= st.sidebar.slider('Result Similarity Cutoff',min_value=0.1,max_value=1.0, step=0.05, on_change=changeCutoffCallback, key='cutoff',disabled= not st.session_state['enablePlottingDataModelChange'])
+
 st.sidebar.markdown( f"### User question:\n{st.session_state['prompt']}")
-vn.logInfo(f"Confirming Schema Changed to: {vnModelValue}")
 
-
-vn.connect_to_snowflake(
-        account=os.environ.get('ACCOUNT'),
-        username=os.environ.get('SNOWFLAKE_USER'),
-        password=os.environ.get('SNOWFLAKE_PASS'),
-        database=os.environ.get('SNOWFLAKE_DATABASE'),
-        role=os.environ.get('ROLE'),
-        schema=st.session_state['vnModel'],
-        warehouse=os.environ.get('WAREHOUSE')
-    )
 
 tab2.subheader("Training Data")
 tab2.button('Delete Training',key='deleteTraining', on_click=deleteTraining)
@@ -286,14 +296,14 @@ trainingData.insert(0, "Select", False)
 
 selectedForDeletion = tab2.data_editor(trainingData, hide_index=True, column_config={"Select": st.column_config.CheckboxColumn(required=True), "id":st.column_config.Column(width='small')},)
 st.session_state['ddl']=tab2.text_area('Enter DDL information', value='', height=None, max_chars=None, key='ddl_input',disabled=st.session_state['enableTraining'] )
-tab2.button('Submit DDL',key='submit_DDL', on_click=trainDDL, args=(st.session_state['ddl'], ))
+tab2.button('Submit DDL',key='submit_DDL', on_click=trainDDL, args=(st.session_state['ddl'], ), disabled= (not st.session_state['ddl']))
 tab2.markdown("***")
 st.session_state['doc']=tab2.text_area('Enter Documentation information:', value='', height=None, max_chars=None, key='doc_input',disabled=st.session_state['enableTraining'])
-tab2.button('Submit Docs',key='submit_DOC', on_click=trainDoc, args=(st.session_state['doc'], ))
+tab2.button('Submit Docs',key='submit_DOC', on_click=trainDoc, args=(st.session_state['doc'], ), disabled= (not st.session_state['doc']))
 tab2.markdown("***")
 st.session_state['sqlQ']= tab2.text_area('Enter Question:', value='', height=None, max_chars=None, key='sqlQ_input',disabled=st.session_state['enableTraining'])
 st.session_state['sqlA']= tab2.text_area('Enter SQL Answer:', value='', height=None, max_chars=None, key='sqlA_input',disabled=st.session_state['enableTraining'])
-tab2.button('Submit Q&A',key='submit_Q&A', on_click=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA'],  ))
+tab2.button('Submit Q&A',key='submit_Q&A', on_click=trainQuestionAnswer, args=(st.session_state['sqlQ'],st.session_state['sqlA']) , disabled= (not st.session_state['sqlQ'] and not st.session_state['sqlA']))
 tab2.markdown("***")
 uploaded_file = tab2.file_uploader("Traing From Backup File - Choose a CSV file", type="csv")
 if uploaded_file is not None:
@@ -387,21 +397,21 @@ for message in st.session_state.messages:
             else:
                 st.text(message["content"])
     except Exception as e:
-        vn.logError(e)
+        vn.vannaLogger.logError(e)
         st.error(f"Error - Failed to render chat message:\n {e}")
 if st.session_state.get('show_sessionstate',True):  
     st.sidebar.write(st.session_state)
 
 if userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHelp']), disabled= not st.session_state['enableUserTextInput'] ) :
 
-    vn.logInfo(f'Working with user input:{userResponse}')
+    vn.vannaLogger.logInfo(f'Working with user input:{userResponse}')
    
     if(st.session_state['prompt'] is  None):
         st.session_state.messages.append({"role": "user", "content": userResponse, "type":"markdown"})
         st.session_state['prompt'] =userResponse
         st.session_state['enableUserTextInput']=False
         st.session_state['enablePlottingDataModelChange'] = False
-        vn.logInfo(f'Set user input as Prompt:{userResponse}')
+        vn.vannaLogger.logInfo(f'Set user input as Prompt:{userResponse}')
         st.rerun()
     elif(st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None):
         st.session_state['enableUserTextInput']=False
@@ -417,7 +427,7 @@ if userResponse :=  st.chat_input( optionSelector(st.session_state['textInputHel
         st.session_state.messages.append({"role": "user", "content": st.session_state["figureInstructions"],  'type':'markdown'   })
         st.rerun()
 elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is None and st.session_state['enableUserTextInput']==False:   
-    vn.logInfo('Generating SQL for user prompt') 
+    vn.vannaLogger.logInfo('Generating SQL for user prompt') 
 
     st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'], schema=st.session_state['vnModel'])
 
@@ -438,12 +448,12 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
                 st.session_state.messages.append({"role": "assistant", "content": 'I was able to successfully write a query for your question' , "type":"markdown"})
                 st.rerun()
         except Exception as e:
-            vn.logError(e)
+            vn.vannaLogger.logError(e)
             st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] ,"type":"sql"})
             st.session_state.messages.append({"role": "assistant", 'content': f'There was an error running the generated SQL above:\n{e}', 'type':'error'})
             st.rerun()
 elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None and st.session_state['sqlInstructions'] is None and st.session_state['enableUserTextInput'] == False :
-    vn.logInfo('Checking with user on next steps after generating SQL') 
+    vn.vannaLogger.logInfo('Checking with user on next steps after generating SQL') 
     
     with st.chat_message("user"):
         st.session_state['sqlRadioInput'] = st.radio(
@@ -472,7 +482,7 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
                 st.session_state.messages.append({"role": "assistant", 'df':df, 'nrows':'5',"type":"dataframe"})
                 st.session_state['sqlRadioInput']=None
             except Exception as e:
-                vn.logError(e)
+                vn.vannaLogger.logError(e)
                 st.session_state.messages.append({"role": "assistant", "sql": st.session_state['tempSQL'] ,"type":"sql"})
                 st.session_state.messages.append({"role": "assistant", 'content': f'There was an error running the generated SQL above:\n{e}', 'type':'error'})
                 st.rerun()
@@ -484,7 +494,7 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
         st.session_state["df"] = vn.run_sql(sql=st.session_state['sql'])
         st.rerun() 
     elif st.session_state['sqlRadioInput'] == "Instruct Changes (SQL):speaking_head_in_silhouette:":
-        vn.logInfo(f'User requests to Instruct SQL Changes for sql:{st.session_state["tempSQL"]}')   
+        vn.vannaLogger.logInfo(f'User requests to Instruct SQL Changes for sql:{st.session_state["tempSQL"]}')   
         st.session_state['enableUserTextInput'] = True
         st.session_state["tempSQL"] = None
         st.session_state["df"] = None
@@ -497,7 +507,7 @@ elif st.session_state['tempSQL'] is not None and st.session_state['sql'] is None
         st.stop()
 
 elif st.session_state["df"] is not None and st.session_state["tempCode"] is None  and st.session_state["enableUserTextInput"] == False :
-    vn.logInfo('Working on generating a Figure for users prompt')   
+    vn.vannaLogger.logInfo('Working on generating a Figure for users prompt')   
     df = st.session_state.get("df")
     if st.session_state.get("show_table", True) and st.session_state.get("userUpdateCode") is None:
         if len(df) > 10:
@@ -518,7 +528,7 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
     else:
         st.session_state["tempCode"] = vn.edit_plot_code(question=st.session_state['prompt'], sql=st.session_state['sql'], df_metadata=df.dtypes,df=df,chart_instructions=st.session_state["figureInstructions"],chart_code=st.session_state["userUpdateCode"],plottingLib=st.session_state['plottingLib']  )
         st.session_state['figureInstructions'] = None
-    vn.logInfo(f'Plot code generated {st.session_state["tempCode"]}')
+    vn.vannaLogger.logInfo(f'Plot code generated {st.session_state["tempCode"]}')
     plottingError =None
     if st.session_state.get("show_plotly_code", True):
         if st.session_state['plottingLib'] == 'Plotly':
@@ -551,7 +561,7 @@ elif st.session_state["df"] is not None and st.session_state["tempCode"] is None
             st.session_state.messages.append({"role": "assistant", "content": f"An error occurred when generating the figure above:\n {plottingError}" , 'type':'error' })
         st.rerun()
 elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is  None  and st.session_state["figureInstructions"] is None and st.session_state['enableUserTextInput'] == False:
-    vn.logInfo('Confirming with user on next steps after generating Figure') 
+    vn.vannaLogger.logInfo('Confirming with user on next steps after generating Figure') 
     with st.chat_message("user"):
         plotyRadioInput = st.radio(
                 "I would like to ...",
@@ -581,12 +591,12 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
         st.session_state["code"] = st.session_state["tempCode"]
         st.rerun()
     elif plotyRadioInput == 'Instruct Changes (Figure):speaking_head_in_silhouette:':
-        vn.logInfo('entering Instruct Changes (Figure)')   
+        vn.vannaLogger.logInfo('entering Instruct Changes (Figure)')   
         st.session_state['enableUserTextInput'] = True
         st.session_state["fig"] = None
         st.rerun()
     elif plotyRadioInput == 'Instruct Changes (SQL) :rewind:':
-        vn.logInfo('entering Instruct Changes (SQL)')   
+        vn.vannaLogger.logInfo('entering Instruct Changes (SQL)')   
         st.session_state.messages.append({"role": "assistant", "content": "Here is the SQL query we have been using, let me know how you wish to change it:"  , "type":"markdown"})
         st.session_state.messages.append({"role": "assistant", "sql":  st.session_state['sql'] , "type":"sql"})
         st.session_state['enableUserTextInput'] = True
@@ -606,7 +616,7 @@ elif st.session_state["tempCode"]  is not None and st.session_state["code"]  is 
         
 elif st.session_state["fig"] is not None and st.session_state["saveQnAPair"] is None:
 
-    vn.logInfo('Confirm with user if the question and sql answer should be saved')   
+    vn.vannaLogger.logInfo('Confirm with user if the question and sql answer should be saved')   
     with st.chat_message("user"):
         plotyRadioInput = st.radio(
                 "I would like to ...",

@@ -2,7 +2,6 @@
 from typing import Union, List, Union
 from vanna import get_models, set_model
 from vanna.openai.openai_chat import OpenAI_Chat
-from vanna.openai.openai_embeddings import OpenAI_Embeddings
 from chromasdb_vector import ChromaDB_VectorStore
 import snowflake.connector
 import pandas as pd
@@ -15,40 +14,18 @@ import plotly.graph_objects as go
 import altair as alt
 from bokeh.plotting import figure
 from vanna.__init__ import TrainingPlan, TrainingPlanItem
-import logging
 import streamlit as st
 from utility import returnMsgFrmtForOAI
-
-class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
+from cosmosVectorStore import AzureCosmosMongovCoreDB
+from VannaLogger import VannaLogger
+class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
     def __init__(self, config=None):
+        # ChromaDB_VectorStore.__init__(self, config=config)
+        AzureCosmosMongovCoreDB.__init__(self, config=config)
         OpenAI_Chat.__init__(self, config=config)
-        ChromaDB_VectorStore.__init__(self, config=config)
-        self.setup_logger()
+        self.vannaLogger = VannaLogger()
+        # self.set_embedding_fuc(self.AzureOpenAI_Embedding.generate_embeddings)
         #VannaBase.__init__(self, config=config)
-
-    # def get_models():
-    #     return get_models()
-    
-    # def set_model():
-    #     return set_model()
-    def setup_logger(self):
-        # Configure logging
-        logging.basicConfig(level=logging.INFO, 
-                            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-        # Create a logger
-        self.logger = logging.getLogger(__name__)
-        
-    def log(self, message: str):
-        self.logger.debug(message)
-    def logDebug(self, message: str):
-        self.logger.debug(message)
-    def logError(self, message: str):
-        self.logger.error(message)
-    def logWarning(self, message: str):
-        self.logger.warning(message)
-    def logInfo(self, message: str):
-        self.logger.info(message)
 
 
     def _sanitize_plot_code(self, raw_plot_code: str) -> str:
@@ -88,7 +65,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                f"Can you generate the Python {plottingLib} code to chart the results of the DataFrame 'df'? Assume the data is in a pandas dataframe called 'df' and each column name is UPPERCASED. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
             ),
         ]
-        self.logInfo(message_log)
+        self.vannaLogger.logInfo(message_log)
         plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
         return self._sanitize_plot_code(self._extract_python_code(plotly_code))
     
@@ -120,7 +97,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                 f"Can you update the Python {plottingLib} code to meet the user's plotting instructions and chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. If there is only one value in the dataframe, use an Indicator. Respond with only Python {plottingLib} code. Do not answer with any explanations -- just the code."
             ),
         ]
-        self.logInfo(message_log)
+        self.vannaLogger.logInfo(message_log)
         plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
 
         return self._sanitize_plot_code(self._extract_python_code(plotly_code))
@@ -179,7 +156,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                "Provide an explanation for the data as it pertains to my question"
             ),
         ]
-        #self.logDebug(message_log)
+        #self.vannaLogger.logDebug(message_log)
         sqlDataDesc = self.submit_prompt(message_log, kwargs=kwargs)
         return sqlDataDesc
     
@@ -297,11 +274,13 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         for example in question_sql_list:
             if example is None:
-                self.logInfo("example is None")
+                self.vannaLogger.logInfo("example is None")
             else:
                 if example is not None and "question" in example and "sql" in example:
                     message_log.append(OpenAI_Chat.user_message(example["question"]))
                     message_log.append(OpenAI_Chat.assistant_message(example["sql"]))
+                else:
+                    Exception(f"SQL Question and Answer not in expected format: Q&A SQL: {example}")
 
         msgHistoryLimit = questionMemoryLen
 
@@ -309,32 +288,33 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             startIndex = -msgHistoryLimit if len(questionConversationHistory) > msgHistoryLimit else -len(questionConversationHistory)
             for message in questionConversationHistory[startIndex:]:
                 message_log = returnMsgFrmtForOAI(message=message,message_log=message_log)
-        self.logInfo(message_log)
+        self.vannaLogger.logInfo(message_log)
         return message_log
     
     def extract_sql(self, llm_response: str) -> str:
         # If the llm_response contains a markdown code block, with or without the sql tag, extract the sql from it
         sql = re.search(r"```sql\n(.*)```", llm_response, re.DOTALL)
         if sql:
-            self.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            self.vannaLogger.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
         # Regular expression pattern to match a SQL query
         sql = re.search(r"((WITH\s+.+?\s+AS\s.+)|(SELECT\s+.+?));", llm_response,  re.IGNORECASE | re.DOTALL)
         if sql:
-            self.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            self.vannaLogger.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
         
         sql = re.search(r"```(.*)```", llm_response, re.DOTALL)
         if sql:
-            self.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
+            self.vannaLogger.logDebug(f"Output from LLM: {llm_response} \nExtracted SQL: {sql.group(1)}")
             return sql.group(1)
         
         return llm_response
     
     def generate_sql(self, question: str,questionConversationHistory:list, schema:str=None, **kwargs) -> str:
-        question_sql_list = self.get_similar_question_sql(question, schema=schema, **kwargs)
-        ddl_list = self.get_related_ddl(question,schema=schema, **kwargs)
-        doc_list = self.get_related_documentation(question,schema=schema, **kwargs)
+        questionVector=self.generate_embedding(question)
+        question_sql_list = self.get_similar_question_sql(question=None,questionVectorIN=questionVector, schema=schema, **kwargs)
+        ddl_list = self.get_related_ddl(question=None, questionVectorIN=questionVector,schema=schema, **kwargs)
+        doc_list = self.get_related_documentation(question=None,questionVectorIN=questionVector, schema=schema, **kwargs)
         prompt = self.get_sql_prompt(
             question=question,
             question_sql_list=question_sql_list,
@@ -378,7 +358,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             if fig is None:
                 raise Exception('Failed to generate Figure')
         except Exception as e:
-            self.logError(e)
+            self.vannaLogger.logError(e)
             error =e
             # Inspect data types
             numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
@@ -431,7 +411,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                 if fig is None:
                     raise Exception('Failed to generate Figure')
         except Exception as e:
-            self.logError(e)
+            self.vannaLogger.logError(e)
             error = e
             fig = alt.Chart(df).mark_text().encode(
                 text=alt.Text(value='Error in creating the chart')
@@ -461,7 +441,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                 if fig is None:
                     raise Exception('Failed to generate Figure')
         except Exception as e:
-            self.logError(e)
+            self.vannaLogger.logError(e)
             error =e
             fig = figure(title="Error in creating the figure")
             fig.text(x=0, y=0, text=['Error'])
@@ -502,17 +482,17 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             raise ValidationError("Please also provide a SQL query")
 
         if documentation:
-            self.logInfo("Adding documentation....")
+            self.vannaLogger.logInfo("Adding documentation....")
             return self.add_documentation(documentation,schema=schema)
 
         if sql:
             if question is None:
                 question = self.generate_question(sql)
-                self.logInfo("Question generated with sql:", question, "\nAdding SQL...")
+                self.vannaLogger.logInfo("Question generated with sql:", question, "\nAdding SQL...")
             return self.add_question_sql(question=question, sql=sql,schema=schema)
 
         if ddl:
-            self.logInfo("Adding ddl:", ddl)
+            self.vannaLogger.logInfo("Adding ddl...")
             return self.add_ddl(ddl,schema=schema)
 
         if plan:
@@ -526,15 +506,15 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
     
     def _get_databases(self) -> List[str]:
         try:
-            self.logInfo("Trying INFORMATION_SCHEMA.DATABASES")
+            self.vannaLogger.logInfo("Trying INFORMATION_SCHEMA.DATABASES")
             df_databases = self.run_sql("SELECT * FROM INFORMATION_SCHEMA.DATABASES")
         except Exception as e:
-            self.logError(e)
+            self.vannaLogger.logError(e)
             try:
-                self.logError("Trying SHOW DATABASES")
+                self.vannaLogger.logError("Trying SHOW DATABASES")
                 df_databases = self.run_sql("SHOW DATABASES")
             except Exception as e:
-                self.logError(e)
+                self.vannaLogger.logError(e)
                 return []
 
         return df_databases["DATABASE_NAME"].unique().tolist()                
@@ -568,7 +548,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         if use_historical_queries:
             try:
-                self.logInfo("Trying query history")
+                self.vannaLogger.logInfo("Trying query history")
                 df_history = self.run_sql(
                     """ select * from table(information_schema.query_history(result_limit => 5000)) order by start_time"""
                 )
@@ -612,7 +592,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                     )
 
             except Exception as e:
-                self.logError(e)
+                self.vannaLogger.logError(e)
 
         databases = self._get_databases()
 
@@ -623,17 +603,17 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             try:
                 df_tables = self._get_information_schema_tables(database=database, schema=filter_schemas)
 
-                self.logInfo(f"Trying INFORMATION_SCHEMA.COLUMNS for {database}")
+                self.vannaLogger.logInfo(f"Trying INFORMATION_SCHEMA.COLUMNS for {database}")
                 df_columns = self.run_sql(
                     f"SELECT * FROM {database}.INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA ='{filter_schemas}'"
                 )
 
-                self.logInfo(f'Filtered Schemas {filter_schemas}')
+                self.vannaLogger.logInfo(f'Filtered Schemas {filter_schemas}')
       
                 for schema in df_tables["TABLE_SCHEMA"].unique().tolist():
-                    self.logInfo(f'Trying Schema {filter_schemas}')
+                    self.vannaLogger.logInfo(f'Trying Schema {filter_schemas}')
                     if filter_schemas is not None and schema not in filter_schemas:
-                        self.logInfo(f'Filtered Schemas {filter_schemas}')
+                        self.vannaLogger.logInfo(f'Filtered Schemas {filter_schemas}')
                         continue
 
                     if (
@@ -659,7 +639,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                                     f"TABLE_NAME == '{table}'"
                                 )
                             )
-                            doc = f"The following columns are in the {table} table in the {database} database:\n\n"
+                            doc = f"The following columns are in the {database}.{schema}.{table} table, format: database.schema.table:\n\n"
                             doc += df_columns_filtered_to_table[
                                 [
                                     "TABLE_CATALOG",
@@ -667,24 +647,24 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                                     "TABLE_NAME",
                                     "COLUMN_NAME",
                                     "DATA_TYPE",
-                                    "COMMENT",
+                                    # "COMMENT",
                                 ]
-                            ].to_markdown()
+                            ].to_markdown(index=False)
 
                             plan._plan.append(
                                 TrainingPlanItem(
                                     item_type=TrainingPlanItem.ITEM_TYPE_IS,
                                     item_group=f"{database}.{schema}",
-                                    item_name=table,
+                                    item_name=table ,
                                     item_value=doc,
                                 )
                             )
 
                     except Exception as e:
-                        self.logError(e)
+                        self.vannaLogger.logError(e)
                         pass
             except Exception as e:
-                self.logError(e)
+                self.vannaLogger.logError(e)
 
         return plan
             
@@ -693,10 +673,10 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
                                                  filter_schemas=schema, 
                                                  include_information_schema=True,
                                                  use_historical_queries = False)
-        self.logInfo(f"Running Training Plan for DB:{database}")
-        self.logInfo(f"Running Training Plan for Schema {schema}")
+        self.vannaLogger.logInfo(f"Running Training Plan for DB:{database}")
+        self.vannaLogger.logInfo(f"Running Training Plan for Schema {schema}")
 
-        self.logInfo(plan)
+        self.vannaLogger.logInfo(plan)
         self.train(plan=plan,schema=schema)
     
     def summarizePrompt(
@@ -724,16 +704,16 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
         if questionConversationHistory:
             startIndex = -msgHistoryLimit if len(questionConversationHistory) > msgHistoryLimit else -len(questionConversationHistory)
-            self.logInfo(questionConversationHistory[startIndex:])
+            self.vannaLogger.logInfo(questionConversationHistory[startIndex:])
             # user_messages = [item for item in questionConversationHistory if item['role'] == 'user']
             for message in questionConversationHistory[startIndex:]:
-                self.logInfo(message)
+                self.vannaLogger.logInfo(message)
                 message_log = returnMsgFrmtForOAI(message=message,message_log=message_log)
         
         message_log.append(self.user_message(
                f"Please re-summarize my Master Question based on the preceeding conversation."))
         
-        self.logInfo(message_log)
-        #self.logDebug(message_log)
+        self.vannaLogger.logInfo(message_log)
+        #self.vannaLogger.logDebug(message_log)
         summerizedQuestion = self.submit_prompt(message_log, kwargs=kwargs)
         return summerizedQuestion
