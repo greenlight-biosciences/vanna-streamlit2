@@ -423,6 +423,8 @@ elif st.session_state['prompt'] is not None and st.session_state['tempSQL'] is N
     vn.vannaLogger.logInfo('Generating SQL for user prompt') 
     
     st.session_state['tempSQL']= vn.generate_sql(question=st.session_state['prompt'], questionConversationHistory=st.session_state['messages'], schema=st.session_state['vnModel'])
+    
+    vn.vannaLogger.logDebug(f"Immediate Return from generate_sql:{st.session_state['tempSQL']}")
 
     if detect_sql_statement_at_line_start(st.session_state['tempSQL']) == False:
         #responses is not a select statement let user ask again
