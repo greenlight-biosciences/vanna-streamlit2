@@ -1,12 +1,16 @@
 import logging
-
+import os
 class VannaLogger:
-    def __init__(self):
-        self.setup_logger()
+    def __init__(self, env_var_name='LOG_LEVEL'):
+        self.setup_logger(env_var_name)
 
-    def setup_logger(self):
-        # Configure logging
-        logging.basicConfig(level=logging.INFO,
+    def setup_logger(self, env_var_name):
+        # Fetch the log level from environment variable, default to INFO
+        env_log_level = os.getenv(env_var_name, 'INFO').upper()
+        log_level = getattr(logging, env_log_level, logging.INFO)
+
+        # Configure logging with the environment variable's level
+        logging.basicConfig(level=log_level,
                             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # Create a logger specific to this class
         self.logger = logging.getLogger(self.__class__.__name__)
