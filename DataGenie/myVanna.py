@@ -19,21 +19,24 @@ from utility import returnMsgFrmtForOAI
 from cosmosVectorStore import AzureCosmosMongovCoreDB
 from VannaLogger import VannaLogger
 from SnowflakeConnection import SnowflakeConnection
+import openai
 class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
     def __init__(self, config=None):
         # ChromaDB_VectorStore.__init__(self, config=config)
         AzureCosmosMongovCoreDB.__init__(self, config=config)
         OpenAI_Chat.__init__(self, config=config)
-        self.vannaLogger = VannaLogger()
+        self.vannaLogger = VannaLogger(env_var_name='LOG_LEVEL')
         self.snow = SnowflakeConnection()
         self.run_sql_is_set = True
         
-    def run_sql(self,sql:str):
+    def run_sql(self,sql:str) -> pd.DataFrame:
         with self.snow as conn:
             cur = conn.cursor()
             try:
                 cur.execute(sql)
-                return cur.fetchall()
+                results= cur.fetchall()
+                df = pd.DataFrame(results, columns=[desc[0] for desc in cur.description])
+                return df
             finally:
                 cur.close()
 
@@ -76,7 +79,7 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
             ),
         ]
         self.vannaLogger.logInfo(message_log)
-        plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
+        plotly_code = self.submit_prompt(message_log, kwargs=kwargs, model_over_ride='gpt-35-turbo-16k')
         return self._sanitize_plot_code(self._extract_python_code(plotly_code))
     
     def edit_plot_code(
@@ -108,7 +111,7 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
             ),
         ]
         self.vannaLogger.logInfo(message_log)
-        plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
+        plotly_code = self.submit_prompt(message_log, kwargs=kwargs, model_over_ride='gpt-35-turbo-16k')
 
         return self._sanitize_plot_code(self._extract_python_code(plotly_code))
     
@@ -167,97 +170,9 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
             ),
         ]
         #self.vannaLogger.logDebug(message_log)
-        sqlDataDesc = self.submit_prompt(message_log, kwargs=kwargs)
+        sqlDataDesc = self.submit_prompt(message_log, kwargs=kwargs,model_over_ride='gpt-35-turbo-16k')
         return sqlDataDesc
     
-    # @st.cache_resource
-    # def connect_to_snowflake(
-    #     self,
-    #     account: str,
-    #     username: str,
-    #     password: str,
-    #     database: str,
-    #     schema: str,
-    #     role: Union[str, None] = None,
-    #     warehouse: Union[str, None] = None,
-    # ):
-    #     try:
-    #         snowflake = __import__("snowflake.connector")
-    #     except ImportError:
-    #         raise DependencyError(
-    #             "You need to install required dependencies to execute this method, run command:"
-    #             " \npip install vanna[snowflake]"
-    #         )
-
-    #     if username == "my-username":
-    #         username_env = os.environ.get("SNOWFLAKE_USERNAME")
-
-    #         if username_env is not None:
-    #             username = username_env
-    #         else:
-    #             raise ImproperlyConfigured("Please set your Snowflake username.")
-
-    #     if password == "my-password":
-    #         password_env = os.environ.get("SNOWFLAKE_PASSWORD")
-
-    #         if password_env is not None:
-    #             password = password_env
-    #         else:
-    #             raise ImproperlyConfigured("Please set your Snowflake password.")
-
-    #     if account == "my-account":
-    #         account_env = os.environ.get("SNOWFLAKE_ACCOUNT")
-
-    #         if account_env is not None:
-    #             account = account_env
-    #         else:
-    #             raise ImproperlyConfigured("Please set your Snowflake account.")
-
-    #     if database == "my-database":
-    #         database_env = os.environ.get("SNOWFLAKE_DATABASE")
-
-    #         if database_env is not None:
-    #             database = database_env
-    #         else:
-    #             raise ImproperlyConfigured("Please set your Snowflake database.")
-
-    #     conn = snowflake.connector.connect(
-    #         user=username,
-    #         password=password,
-    #         account=account,
-    #         database=database,
-    #         schema=schema,
-    #         role=role,
-    #         warehouse=warehouse
-    #     )
-
-    # def run_sql_snowflake(sql: str) -> pd.DataFrame:
-    #     cs = conn.cursor()
-
-    #     if role is not None:
-    #         roleSQL = f"USE ROLE {role}"
-    #         cs.execute(roleSQL)
-
-    #     if warehouse is not None:
-    #         warehouseSQL= f"USE WAREHOUSE {warehouse}"
-    #         cs.execute(warehouseSQL)
-        
-    #     dbuseSQL= f"USE DATABASE {database}"
-    #     cs.execute(dbuseSQL)
-
-    #     dbuseschema= f"USE SCHEMA {schema}"
-    #     cs.execute(dbuseschema)
-        
-    #     cur = cs.execute(sql)
-
-    #     results = cur.fetchall()
-
-    #     # Create a pandas dataframe from the results
-    #     df = pd.DataFrame(results, columns=[desc[0] for desc in cur.description])
-
-    #     return df
-
-
     def get_sql_prompt(
         self,
         question: str,
@@ -268,7 +183,10 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
         questionMemoryLen: int = 5,
         **kwargs,
     ):
-        initial_prompt = "The user provides a question and you provide SQL code to run on Snowflake database. You will only respond with SQL code and not with any explanations.\n\nRespond with ONLY with SQL code, you may respond using a 'SELECT' or 'WITH' for complex queries, ending you responses at ';'. In the SQL code, do your best to provide nicely named columns along additional metadata columns to answer the question. Do not answer with any explanations -- just the sql code from 'SELECT' or 'WITH' to the ';'.\n"
+        initial_prompt = "Respond to queries with SQL code for Snowflake database execution only. No introductions, summaries, or any text outside SQL."
+        initial_prompt += " Directly begin with 'SELECT' or 'WITH' for complex queries, ending strictly with a semicolon (';').\n"
+        initial_prompt += "Column names must be descriptive, including necessary metadata for answering the question directly."
+        initial_prompt += " Absolutely no text outside the SQL query, including no preambles like 'Here is the generated SQL query for your question:', is allowed.\n"
 
         initial_prompt = OpenAI_Chat.add_ddl_to_prompt(
             initial_prompt, ddl_list, max_tokens=14000
@@ -333,7 +251,7 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
             **kwargs,
         )
         llm_response = self.submit_prompt(prompt, **kwargs)
-        # print(llm_response)
+        self.vannaLogger.logInfo(f'Responses from LLM:{llm_response}')
         return self.extract_sql(llm_response)
     
 
@@ -722,8 +640,65 @@ class MyVanna(AzureCosmosMongovCoreDB, OpenAI_Chat):
             
             self.vannaLogger.logInfo(message_log)
             #self.vannaLogger.logDebug(message_log)
-            summerizedQuestion = self.submit_prompt(message_log, kwargs=kwargs)
+            summerizedQuestion = self.submit_prompt(message_log, kwargs=kwargs, model_over_ride='gpt-35-turbo-16k')
             return summerizedQuestion
         except Exception as e:
             self.vannaLogger.logError(str(e))
-            return question  
+            return question 
+         
+    def submit_prompt(self, prompt, model_over_ride:str=None, **kwargs) -> str:
+        if prompt is None:
+            raise Exception("Prompt is None")
+
+        if len(prompt) == 0:
+            raise Exception("Prompt is empty")
+
+        # Assuming prompt is an iterable of messages (e.g., list of dicts)
+        num_tokens = sum(len(message["content"]) / 4 for message in prompt)  # Simplified token count
+
+        if model_over_ride is not None:
+            self.vannaLogger.logInfo(f"Using model {self.config['model']} for {num_tokens} tokens (approx)")
+            response = openai.chat.completions.create(
+                model=model_over_ride,
+                messages=prompt,
+                max_tokens=1024,
+                stop=None,
+                temperature=0.7,
+                stream=False
+            )
+        elif self.config and "engine" in self.config:
+            self.vannaLogger.logInfo(f"Using engine {self.config['engine']} for {num_tokens} tokens (approx)")
+            response = openai.chat.completions.create(
+                engine=self.config["engine"],
+                messages=prompt,
+                max_tokens=500,
+                stop=None,
+                temperature=0.7,
+                stream=False
+            )
+        elif self.config and "model" in self.config:
+            self.vannaLogger.logInfo(f"Using model {self.config['model']} for {num_tokens} tokens (approx)")
+            response = openai.chat.completions.create(
+                model=self.config["model"],
+                messages=prompt,
+                max_tokens=1024,
+                stop=None,
+                temperature=0.7,
+                stream=False
+            )
+        else:
+            # Default model selection logic
+            model = "gpt-3.5-turbo-16k" if num_tokens > 3500 else "gpt-3.5-turbo"
+            self.vannaLogger.logInfo(f"Using model {model} for {num_tokens} tokens (approx)")
+            response = openai.chat.completions.create(
+                model=model, messages=prompt, max_tokens=500, stop=None, temperature=0.7, stream=False
+            )
+        self.vannaLogger.logDebug(f'FULL RESPONSE FROM LLM:{response}')
+        # Combine all text responses
+        combined_text = response.choices[0].message.content
+
+        if not combined_text:
+            # Fallback in case of no text responses
+            return "No response from Data G.E.N.I.E - please try again.."
+
+        return combined_text
